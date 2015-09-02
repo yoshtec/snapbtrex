@@ -44,12 +44,12 @@ you want to call the script via cronjob.
 ### Setup instructions
 transfer with backups with ssh
 
-1. create user snapbtr on both systems
+1\. create user snapbtr on both systems
 ```
 sudo adduser snapbtr
 ```
 
-2. generate ssh key on snd put public into rcv
+2\. generate ssh key on snd put public into rcv
 
 ```sh
 ssh-keygen -t rsa
@@ -57,7 +57,7 @@ ssh-keygen -t rsa
 ssh-copy-id snapbtr@123.45.56.78
 ```
 
-3. create a sudoers file at the receiving machine
+3\. create a sudoers file at the receiving machine
 File: /etc/sudoers.d/90_snapbtrrcv
 
 Contents:
@@ -65,7 +65,7 @@ Contents:
 snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /sbin/btrfs receive*
 ```
 
-4. Create a sudoers include file on the sending machine
+4\. Create a sudoers include file on the sending machine
 
 File: /etc/sudoers.d/90_snapbtrsnd
 
@@ -85,4 +85,13 @@ to ro snaps in the directory of the snapshots via:
 
 ```sh
 sudo find . -maxdepth 1 -type d -exec btrfs property set -t s {} ro true \;
+```
+
+## Crontab Example
+
+
+
+Snapshot and transfer to remote host every day at 4:10 am.
+```
+10 4    * * *   snapbtr /opt/snapbtr/snapbtrex.py --path /mnt/btrfs/.mysnapshots/subvol1/ --snap /mnt/btrfs/@subvol1/ --target-backups 52 --verbose --remote-host 123.45.56.78 --remote-dir /mnt/btrfs/.backup/subvol1/  >> /var/log/snapbtrex.log
 ```
