@@ -74,14 +74,19 @@ transfer with backups with ssh
 3. create a sudoers file at the receiving machine
 File: /etc/sudoers.d/90_snapbtrrcv
 
+Precaution: depending on your distrubution the path for btrfs tools might differ!
+
 Contents:
 --
   snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /sbin/btrfs receive*
+  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs receive*
 --
 
 4. Create a sudoers include file on the sending machine
 
 File: /etc/sudoers.d/90_snapbtrsnd
+
+Precaution: depending on your distrubution the path for btrfs tools might differ!
 
 Contents:
 --
