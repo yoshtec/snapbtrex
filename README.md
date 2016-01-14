@@ -45,7 +45,7 @@ as standalone script if you have appropiate rights.
 ### Setup instructions
 transfer with backups with ssh
 
-1\. create user snapbtr on both systems
+1\. create user ``snapbtr` on both systems
 ```sh
 sudo adduser snapbtr
 ```
@@ -53,12 +53,15 @@ sudo adduser snapbtr
 2\. generate ssh key on sender and copy public key to receiving machine
 
 ```sh
+su - snapbtr
+
 ssh-keygen -t rsa
 
 ssh-copy-id snapbtr@123.45.56.78
 ```
 
-3\. create a sudoers include file at the receiving machine (best use `sudo visudo`)
+3\. create a sudoers include file at the receiving machine (use `sudo visudo`)
+
 File: `/etc/sudoers.d/90_snapbtrrcv`
 
 Contents:
