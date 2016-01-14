@@ -50,7 +50,7 @@ transfer with backups with ssh
 sudo adduser snapbtr
 ```
 
-2\. generate ssh key on snd put public to receiving machine
+2\. generate ssh key on sender and copy public key to receiving machine
 
 ```sh
 ssh-keygen -t rsa
@@ -58,7 +58,7 @@ ssh-keygen -t rsa
 ssh-copy-id snapbtr@123.45.56.78
 ```
 
-3\. create a sudoers file at the receiving machine
+3\. create a sudoers include file at the receiving machine (best use `sudo visudo`)
 File: `/etc/sudoers.d/90_snapbtrrcv`
 
 Contents:
@@ -81,9 +81,9 @@ snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /sbin/btrfs filesystem sync*
 
 
 ## Precautions
-If you created your snapshots with an older version of snapbtr than those
-snapshots had been created as read/write snapshots. The sending of snapshots
-to remote hosts demands that those snaps are readonly. You can change rw snaps
+If you created your snapshots with an old version of snapbtr than those
+snapshots were created as read/write snapshots. The sending of snapshots
+to remote hosts demands that those snaps are read only. You can change rw snaps
 to ro snaps in the directory of the snapshots via:
 
 ```sh
