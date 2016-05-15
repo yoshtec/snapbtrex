@@ -2,12 +2,14 @@
 snapbtrex is a small utility that keeps snapshots of btrfs filesystems
 and optionally send it to a remote system.
 
-The script came originally from https://btrfs.wiki.kernel.org/index.php/SnapBtr it is an extended version wich is capable of transferring snapshots to remote systems.
+The script came originally from https://btrfs.wiki.kernel.org/index.php/SnapBtr
+it is an extended version which is capable of transferring snapshots to remote
+ systems.
 
 You can run it regularly (for example in a small script in
 cron.hourly), or once in a while, to maintain an "interesting" (see
 below) set of snapshots (backups). You may manually add or remove
-snapshots as you like, use 'snapbtr.DATE_FORMAT' (in GMT) as
+snapshots as you like, use `snapbtrex.DATE_FORMAT` (in GMT) as
 snapshot-name.
 
 It will keep at most `--target-backups` snapshots and ensure that
@@ -45,7 +47,7 @@ as standalone script if you have appropiate rights.
 ### Setup instructions
 transfer with backups with ssh
 
-1\. create user ``snapbtr` on both systems
+1\. create user `snapbtr` on both systems
 ```sh
 sudo adduser snapbtr
 ```
@@ -89,9 +91,9 @@ File: `/etc/sudoers.d/90_snapbtrsnd`
 
 Contents:
 ```
-snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /sbin/btrfs send*
-snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /sbin/btrfs snapshot*
-snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /sbin/btrfs filesystem sync*
+snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs send*
+snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs subvolume*
+snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs filesystem sync*
 ```
 
 

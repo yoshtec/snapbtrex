@@ -23,6 +23,9 @@
 snapbtrex is a small utility that keeps snapshots of btrfs filesystems
 and optionally send it to a remote system.
 
+snapbtrex is hosted on github:
+https://github.com/yoshtec/snapbtrex
+
 You can run it regularly (for example in a small script in
 cron.hourly), or once in a while, to maintain an "interesting" (see
 below) set of snapshots (backups). You may manually add or remove
@@ -65,15 +68,16 @@ you want to call the script via cronjob.
 transfer with backups with ssh
 
 1. create user snapbtr on both systems
+--
   sudo adduser snapbtr
-
+--
 
 2. generate ssh key on snd put public into rcv
-
+--
   ssh-keygen -t rsa
 
   ssh-copy-id snapbtr@123.45.56.78
-
+--
 
 3. create a sudoers file at the receiving machine
 File: /etc/sudoers.d/90_snapbtrrcv
@@ -94,7 +98,7 @@ need another line (adopt path to your specific path):
 
 If you need remote pruning then add this:
 --
-  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs receive*
+  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs subvolume delete*
 --
 
 
@@ -107,8 +111,8 @@ Precaution: depending on your distrubution the path for btrfs tools might differ
 Contents:
 --
   snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs send*
-  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs snapshot*
   snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs filesystem sync*
+  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs subvolume*
 --
 
 == Precautions
@@ -134,7 +138,7 @@ DEFAULT_KEEP_BACKUPS = 10
 TIME_SCALE = math.ceil(float((2**32)/math.log(2**32)))
 
 def timef(x):
-    """make value inverse exponential in the time passed"""
+    # make value inverse exponential in the time passed
     try:
         v = math.exp(
             time.mktime(
@@ -153,16 +157,16 @@ def sorted_value(dirs):
         return _sorted_value(dirs)
 
 def _sorted_value(dirs):
-    """Iterate dirs, sorted by their relative value when deleted"""
+    # Iterate dirs, sorted by their relative value when deleted
     def poles(items):
-        """Yield (items[0], items[1]), (items[1], items[2]), ... (items[n-1], items[n])"""
+        # Yield (items[0], items[1]), (items[1], items[2]), ... (items[n-1], items[n])
         rest = iter(items)
         last = rest.next()
         for next in rest:
             yield (last, next)
             last = next
     def all_but_last(items):
-        """Yield items[0], ..., items[n-1]"""
+        # Yield items[0], ..., items[n-1]
         rest = iter(items)
         last = rest.next()
         for x in rest:
@@ -266,6 +270,7 @@ class Operations:
                 receiver_path +  " \'"
                 ]
         self.check_call(args,shell=True)
+
     def link_current(self, receiver, receiver_path, snap, link_target):
         args = ["ssh", receiver, "sudo ln -sfn \'" + os.path.join(receiver_path,snap) + "\' " + link_target ]
         self.check_call(args)
@@ -298,15 +303,19 @@ class FakeOperations(Operations):
         v = self.dirs[dir]
         self.space += v
         del self.dirs[dir]
+
     def listdir(self):
         self.trace("listdir() = %s", self.dirs.keys())
         return self.dirs.iterkeys()
+
     def listremote_dir(self, receiver, receiver_path):
         self.trace("listremotedir() r=%s, rp=%s", receiver, receiver_path)
         return ['20101201-030000', '20101201-040000', '20101201-050000']
+
     def freespace(self):
         self.trace("freespace() = %s", self.space)
         return self.space
+
     def check_call(self, args, shell=False):
         cmd_str = " ".join(args)
         self.trace("EXEC: " + cmd_str)
@@ -573,9 +582,10 @@ def main(argv):
                      "  --target-backups")
 
     if pa.test:
-        operations = FakeOperations(path = pa.path,
-                                    trace = trace,
-                                    dirs = {
+        operations = FakeOperations(
+            path = pa.path,
+            trace = trace,
+            dirs = {
                 '20101201-000000': 0,
                 '20101201-010000': 1,
                 '20101201-020000': 2,
@@ -586,7 +596,7 @@ def main(argv):
                 '20101201-070000': 7,
                 '20101201-080000': 8,
                 },
-                                    space = 5)
+            space = 5)
 
     else:
         operations = Operations(path = pa.path, trace = trace)
