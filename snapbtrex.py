@@ -266,7 +266,7 @@ class Operations:
                 receiver_path +  " \'"
                 ]
         self.check_call(args,shell=True)
-    def link_current(self, receiver, receiver_path, snap, link_target )
+    def link_current(self, receiver, receiver_path, snap, link_target):
         args = ["ssh", receiver, "sudo ln -sfn \'" + os.path.join(receiver_path,snap) + "\' " + link_target ]
         self.check_call(args)
 
