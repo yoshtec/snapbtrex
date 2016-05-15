@@ -413,7 +413,7 @@ def transfer(operations, target_host, target_dir, link_dir):
         if s > parent:
             trace("transfer: parent=%s snap=%s", nparent, s)
             operations.send_withparent(nparent, s, target_host, target_dir)
-            if not link_dir is None
+            if link_dir is not None:
                 operations.link_current(target_host, target_dir, s, link_dir)
             # advance one step
             nparent=s
@@ -545,7 +545,7 @@ def main(argv):
             dest = 'remote_dir',
             help = 'Transfer the snapshot to this directory on the target host')
 
-        transfer_group.add_argument('--remote-link'
+        transfer_group.add_argument('--remote-link',
             metavar = 'PATH',
             dest = 'remote_link',
             help = 'link the transferred snapshot to this PATH')
