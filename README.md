@@ -39,7 +39,7 @@ snapbtrex uses the btrfs send and recieve commands to transfer
 snapshots from a sendin host to a receiving host.
 
 Both hosts have to be prepared as in the setup instructions if
-you want to call the script via cronjob. You can always call snapbtrex 
+you want to call the script via cronjob. You can always call snapbtrex
 as standalone script if you have appropiate rights.
 
 ### Setup instructions
@@ -64,9 +64,21 @@ ssh-copy-id snapbtr@123.45.56.78
 
 File: `/etc/sudoers.d/90_snapbtrrcv`
 
-Contents:
+Minumum content is this for recieving snapshots on a remote system:
 ```
-snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /sbin/btrfs receive*
+  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs receive*
+```
+
+If you want to link the latest transferred item remotely to path then you'll
+need another line (adopt path to your specific path):
+
+```
+  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/ln -sfn /path/to/backups/* /path/to/current/current-link
+```
+
+If you need remote pruning then add this:
+```
+  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs receive*
 ```
 
 Hint: on some Linux flavors you might find the btrfs tools in `/bin/btrfs` opposed to `/sbin/btrfs`, the sudoers files have to reflect that.
@@ -93,7 +105,7 @@ to ro snaps in the directory of the snapshots via:
 sudo find . -maxdepth 1 -type d -exec btrfs property set -t s {} ro true \;
 ```
 
-## Crontab Example
+## Crontab Examples
 
 Snapshot and transfer to remote host every day at 4:10 am, keep 52 snapshots on the origin host.
 ```

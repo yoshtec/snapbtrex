@@ -10,6 +10,10 @@
 # * made snapshots default to readonly
 # * added EXEC as Keyword to find out on verbose what is actually executed
 #
+# 20160515 1.2 (yt)
+# * remote linking to latest transferred snapshot
+# * logging improvements
+#
 # TODO: remote pruning
 # TODO: remove shell = True for ssh stuff
 # TODO: change to different time format for integration with smaba vfs https://www.samba.org/samba/docs/man/manpages/vfs_shadow_copy2.8.html
@@ -76,11 +80,23 @@ File: /etc/sudoers.d/90_snapbtrrcv
 
 Precaution: depending on your distrubution the path for btrfs tools might differ!
 
-Contents:
+Minumum content is this for recieving snapshots on a remote system:
 --
-  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /sbin/btrfs receive*
   snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs receive*
 --
+
+If you want to link the latest transferred item remotely to path then you'll
+need another line (adopt path to your specific path):
+
+--
+  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/ln -sfn /path/to/backups/* /path/to/current/current-link
+--
+
+If you need remote pruning then add this:
+--
+  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs receive*
+--
+
 
 4. Create a sudoers include file on the sending machine
 
@@ -90,11 +106,10 @@ Precaution: depending on your distrubution the path for btrfs tools might differ
 
 Contents:
 --
-  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /sbin/btrfs send*
-  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /sbin/btrfs snapshot*
-  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /sbin/btrfs filesystem sync*
+  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs send*
+  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs snapshot*
+  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs filesystem sync*
 --
-
 
 == Precautions
 if you created your snapshots with an older version of snapbtr than those
@@ -103,7 +118,6 @@ to remote hosts demands that those snaps are readonly. You can change rw snaps
 to ro snaps in the directory of the snapshots via:
 
   sudo find . -maxdepth 1 -type d -exec btrfs property set -t s {} ro true \;
-
 
 
 """
@@ -117,7 +131,7 @@ DATE_FORMAT = '%Y%m%d-%H%M%S'
 DEFAULT_KEEP_BACKUPS = 10
 
 # find TIME_SCALE: t < 2**32 => e**(t/c) < 2**32
-TIME_SCALE = math.ceil(float((2**32)/math.log(2**32))) 
+TIME_SCALE = math.ceil(float((2**32)/math.log(2**32)))
 
 def timef(x):
     """make value inverse exponential in the time passed"""
@@ -125,7 +139,7 @@ def timef(x):
         v = math.exp(
             time.mktime(
                 time.strptime(
-                    os.path.split(x)[1], 
+                    os.path.split(x)[1],
                     DATE_FORMAT))
             /TIME_SCALE)
     except:
@@ -155,7 +169,7 @@ def _sorted_value(dirs):
             yield last
             last = x
 
-    # Remaining candidates for yield, 
+    # Remaining candidates for yield,
     # except the "max" one (latest)
     candidates = dict(
         all_but_last((x, xf)
@@ -179,7 +193,7 @@ def _sorted_value(dirs):
 
     # also, we must delete the last entry
     yield candidates.iterkeys().next()
-        
+
 def freespace(path):
     st = os.statvfs(path)
     return st[statvfs.F_BFREE] * st[statvfs.F_FRSIZE]
@@ -193,7 +207,7 @@ class Operations:
         self.trace("EXEC: " + cmd_str)
         import subprocess
         p = subprocess.Popen(
-            args, 
+            args,
             stdout=subprocess.PIPE,
             shell=shell)
         stdout = p.communicate()[0]
@@ -249,16 +263,18 @@ class Operations:
                 " | pv -brt | " + "ssh " +
                 receiver +
                 " \'sudo btrfs receive -v " +
-                receiver_path + " \'"
+                receiver_path +  " \'"
                 ]
         self.check_call(args,shell=True)
-
+    def link_current(self, receiver, receiver_path, snap, link_target )
+        args = ["ssh", receiver, "sudo ln -sfn \'" + os.path.join(receiver_path,snap) + "\' " + link_target ]
+        self.check_call(args)
 
 
 class FakeOperations(Operations):
-    def __init__(self, 
-                 path, 
-                 trace = None, 
+    def __init__(self,
+                 path,
+                 trace = None,
                  dirs = None,
                  space = None,
                  snap_space = None):
@@ -268,7 +284,7 @@ class FakeOperations(Operations):
         if space is None:
             space = 0
         self.dirs = dirs
-        self.space = space 
+        self.space = space
         if snap_space is None:
             snap_space = 1
         self.snap_space = snap_space
@@ -353,7 +369,7 @@ def cleandir(operations, targets):
                 if was_above_target_backups is None:
                     was_above_target_backups = True
                 do_del = True
-        
+
         if not do_del:
             break
 
@@ -364,7 +380,7 @@ def cleandir(operations, targets):
         else:
             operations.unsnap(next_del)
 
-def transfer(operations, target_host, target_dir):
+def transfer(operations, target_host, target_dir, link_dir):
     """Transfer snapshots to remote host"""
 
     trace = operations.trace
@@ -382,6 +398,7 @@ def transfer(operations, target_host, target_dir):
     # no parent exists so
     if len(parents) == 0:
         # start transferring the oldest snapshot
+        # by that snapbtrex will transfer all snapshots that have been created
         operations.send_single( min(localsnaps), target_host, target_dir)
         parents.add(min(localsnaps))
 
@@ -396,10 +413,20 @@ def transfer(operations, target_host, target_dir):
         if s > parent:
             trace("transfer: parent=%s snap=%s", nparent, s)
             operations.send_withparent(nparent, s, target_host, target_dir)
+            if not link_dir is None
+                operations.link_current(target_host, target_dir, s, link_dir)
             # advance one step
             nparent=s
 
 
+def log_trace(fmt, *args, **kwargs):
+    tt = time.strftime(DATE_FORMAT, time.gmtime(None)) + ": "
+    if args is not None:
+        print  tt + (fmt % args)
+    elif kwargs is not None:
+        print tt + (fmt % kwargs)
+    else:
+        print tt + (fmt)
 
 def default_trace(fmt, *args, **kwargs):
     if args is not None:
@@ -429,10 +456,10 @@ def main(argv):
                     return int(val) * 1024**mods[mod]
                 else:
                     raise "Invalid value: %s, expected: %s" % (target_str, form)
-                
+
             def __nonzero__(self):
                 return True
-        
+
             def __init__(self, value):
                 self.origin = value
             def __new__(cls, value=0):
@@ -444,69 +471,84 @@ def main(argv):
                     return str(self.origin)
                 else:
                     return "%s[%s]" % (self.origin, int(self))
-        
+
         parser = argparse.ArgumentParser(
             description = 'keeps btrfs snapshots for backup',
             #formatter_class = argparse.ArgumentDefaultsHelpFormatter
             )
-    
-        parser.add_argument('--path', '-p', metavar = 'PATH', 
-                            help = 'Path for snapshots and cleanup',
-                            default = '.')
-    
+
+        parser.add_argument('--path', '-p',
+            metavar = 'PATH',
+            help = 'Path for snapshots and cleanup',
+            default = '.')
+
         target_group = parser.add_argument_group(
-            title='Cleanup',
-            description='Try to cleanup until all of the targets are met.')
-    
+            title = 'Cleanup',
+            description = 'Try to cleanup until all of the targets are met.')
+
         target_group.add_argument('--target-freespace', '-F',
-                                  dest='target_freespace',
-                            metavar = 'SIZE',
-                            default = None,
-                            type = Space,
-                            help = '''Cleanup PATH until at least SIZE is free. SIZE is #bytes, or given with K, M, G or T respectively for kilo, ...''')
+            dest = 'target_freespace',
+            metavar = 'SIZE',
+            default = None,
+            type = Space,
+            help = '''Cleanup PATH until at least SIZE is free. SIZE is #bytes, or given with K, M, G or T respectively for kilo, ...''')
+
         target_group.add_argument('--target-backups', '-B',
-                                  dest='target_backups',
-                                  metavar = '#', type = int,
-                                  help =
-                                  'Cleanup PATH until at most B backups remain')
+            dest='target_backups',
+            metavar = '#',
+            type = int,
+            help ='Cleanup PATH until at most B backups remain')
+
         target_group.add_argument('--keep-backups', '-K',
-                            metavar = '#', type = int,
-                                  default = DEFAULT_KEEP_BACKUPS,
-                                  help = 'Stop cleaning when K backups remain')
-    
-        snap_group_x = parser.add_argument_group(  title = 'Snapshotting')
+            metavar = '#',
+            type = int,
+            default = DEFAULT_KEEP_BACKUPS,
+            help = 'Stop cleaning when K backups remain')
+
+        snap_group_x = parser.add_argument_group(title = 'Snapshotting')
         snap_group = parser.add_mutually_exclusive_group(required=False)
+
         snap_group.add_argument('--snap', '-s',
-                            metavar = 'SUBVOL', default = '/',
-                            help = 'Take snapshot of SUBVOL on invocation')
+            metavar = 'SUBVOL',
+            default = '/',
+            help = 'Take snapshot of SUBVOL on invocation')
+
         snap_group.add_argument('--no-snap', '-S',
-                            dest = 'snap',
-                            help = 'Disable snapshot taking',
-                            action = 'store_const', const = None)
-        
-        parser.add_argument('--test', help = 'Execute built-in test', 
-                            action='store_true')
-                            
-        parser.add_argument('--explain', 
-                            help = 'Explain what %(prog)s does (and stop)',
-                            action='store_true')
-    
-        parser.add_argument('--verbose', help = 'Verbose output', 
-                            action='store_true')
+            dest = 'snap',
+            help = 'Disable snapshot taking',
+            action = 'store_const',
+            const = None)
 
-        transfer_group = parser.add_argument_group(title='Transfer',
-                            description='Transfer Snapshots to other hosts. It is assumed that the user running the script is run can connect to the remote host via keys and without passwords. See --explain for more info')
+        parser.add_argument('--test',
+            help = 'Execute built-in test',
+            action = 'store_true')
+
+        parser.add_argument('--explain',
+            help = 'Explain what %(prog)s does (and stop)',
+            action = 'store_true')
+
+        parser.add_argument('--verbose',
+            help = 'Verbose output',
+            action = 'store_true')
+
+        transfer_group = parser.add_argument_group(
+            title = 'Transfer',
+            description = 'Transfer Snapshots to other hosts. It is assumed that the user running the script is run can connect to the remote host via keys and without passwords. See --explain for more info')
+
         transfer_group.add_argument('--remote-host',
-                            metavar='HOST',
-                            dest='remote_host',
-                            help= 'Transfer to target host via ssh.',
-                            )
-        transfer_group.add_argument('--remote-dir',
-                            metavar='PATH',
-                            dest='remote_dir',
-                            help='Transfer the snapshot to this directory on the target host',
-                            )
+            metavar = 'HOST',
+            dest = 'remote_host',
+            help = 'Transfer to target host via ssh.')
 
+        transfer_group.add_argument('--remote-dir',
+            metavar = 'PATH',
+            dest = 'remote_dir',
+            help = 'Transfer the snapshot to this directory on the target host')
+
+        transfer_group.add_argument('--remote-link'
+            metavar = 'PATH',
+            dest = 'remote_link',
+            help = 'link the transferred snapshot to this PATH')
 
 
         pa = parser.parse_args(argv[1:])
@@ -514,14 +556,17 @@ def main(argv):
     pa, parser = args()
 
     if pa.verbose:
-        trace = default_trace
+        if sys.stdout.isatty():
+            trace = default_trace
+        else:
+            trace = log_trace
     else:
         trace = None
 
     if pa.explain:
         sys.stdout.write(__doc__)
         return 0
-    
+
     if pa.target_freespace is None and pa.target_backups is None:
         parser.error("Set a target, either with: \n"
                      "  --target-freespace, or\n"
@@ -542,7 +587,7 @@ def main(argv):
                 '20101201-080000': 8,
                 },
                                     space = 5)
-        
+
     else:
         operations = Operations(path = pa.path, trace = trace)
 
@@ -550,10 +595,9 @@ def main(argv):
        operations.snap(path = pa.snap)
 
     if not (pa.remote_host is None and pa.remote_dir is None ):
-        transfer(operations, pa.remote_host, pa.remote_dir)
+        transfer(operations, pa.remote_host, pa.remote_dir, pa.remote_link)
 
     cleandir(operations = operations, targets = pa)
 
 if "__main__" == __name__:
     sys.exit(main(sys.argv))
-
