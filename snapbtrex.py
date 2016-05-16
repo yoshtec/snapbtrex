@@ -215,24 +215,26 @@ class Operations:
 
     def check_call(self, args, shell=False):
         cmd_str = " ".join(args)
-        self.trace("EXEC: " + cmd_str)
+        self.trace("EXEC> " + cmd_str)
         import subprocess
         p = subprocess.Popen(
             args,
             stdout=subprocess.PIPE,
             shell=shell)
         stdout = p.communicate()[0]
-        self.trace(stdout)
+        self.trace("OUTPUT> " + stdout)
         if p.returncode != 0:
             raise Exception("failed %s" % cmd_str)
         return stdout # return the content
 
     def sync(self, dir):
         # syncing to be sure the operation is on the disc
+        self.trace("Local> sync filesystem '%s'", dir)
         args = ["sudo", "btrfs", "filesystem", "sync", dir]
         self.check_call(args)
 
     def unsnap(self, dir):
+        self.trace("Local> remove snapshot '%s'", dir)
         args = ["sudo", "btrfs", "subvolume", "delete",
                 os.path.join(self.path, dir)]
         self.check_call(args)
@@ -244,12 +246,14 @@ class Operations:
         return [d for d in os.listdir(self.path) if timef(d)]
 
     def listremote_dir(self, receiver, receiver_path):
+        self.trace("Remote> list remote files host=%s, dir=%s", receiver, receiver_path)
         args = ["ssh", receiver, "ls -1 " + receiver_path]
         return [d for d in self.check_call(args).splitlines() if timef(d)]
 
     def snap(self, path):
         #yt: changed to readonly snapshots
         newdir = os.path.join(self.path, self.datestamp())
+        self.trace("Local> snapshoting path=%s to newdir=%s", path, newdir)
         args = ["sudo", "btrfs", "subvolume", "snapshot", "-r",
                 path,
                 newdir]
@@ -266,6 +270,7 @@ class Operations:
             f(*args, **kwargs)
 
     def send_single(self, dir, receiver, receiver_path):
+        self.trace("Remote> send single snapshot from %s to host %s path=%s", dir, receiver, receiver_path)
         args = ["sudo btrfs send -v " +
                 os.path.join(self.path, dir) +
                 "| pv -brt | ssh " +
@@ -275,6 +280,7 @@ class Operations:
         self.check_call(args, shell=True)
 
     def send_withparent(self, parent_snap, snap, receiver, receiver_path):
+        self.trace("Remote> send snapshot from %s with parent %s to host %s path=%s", dir, parent_snap,receiver, receiver_path)
         args = ["sudo btrfs send -v -p " +
                 os.path.join(self.path, parent_snap) + " " +
                 os.path.join(self.path, snap) +
@@ -286,10 +292,12 @@ class Operations:
         self.check_call(args,shell=True)
 
     def link_current(self, receiver, receiver_path, snap, link_target):
+        self.trace("Remote> linking current snapshot host=%s path=%s snap=%s link=%s", receiver, receiver_path, snap, link_target)
         args = ["ssh", receiver, "sudo ln -sfn \'" + os.path.join(receiver_path,snap) + "\' " + link_target ]
         self.check_call(args)
 
     def remote_unsnap(self, receiver, receiver_path, dir):
+        self.trace("Remote> delete snapshot %s from host=%s path=%s", dir, receiver, receiver_path)
         args = ["ssh", receiver, "sudo btrfs subvolume delete \'" +
                 os.path.join(receiver_path, dir) + "\'"]
         self.check_call(args)
@@ -338,7 +346,7 @@ class FakeOperations(Operations):
 
     def check_call(self, args, shell=False):
         cmd_str = " ".join(args)
-        self.trace("EXEC: " + cmd_str)
+        self.trace("EXEC> " + cmd_str)
 
 def cleandir(operations, targets):
     # Perform actual cleanup using 'operations' until 'targets' are met
@@ -365,7 +373,7 @@ def cleandir(operations, targets):
 
         if keep_backups is not None:
             if dirs_len <= keep_backups:
-                trace("Reached number of backups to keep: %s ", dirs_len)
+                trace("Local> Reached number of backups to keep: %s ", dirs_len)
                 break
 
         if target_fsp is not None:
@@ -373,7 +381,7 @@ def cleandir(operations, targets):
             #print "+++ ", fsp, target_fsp, fsp >= target_fsp
             if fsp >= target_fsp:
                 if (was_above_target_freespace or was_above_target_freespace is None):
-                    trace("Satisfied freespace target: %s with %s",
+                    trace("Local> Satisfied freespace target: %s with %s",
                           fsp, target_fsp)
                     was_above_target_freespace = False
                 if do_del is None:
@@ -386,7 +394,7 @@ def cleandir(operations, targets):
         if target_backups is not None:
             if dirs_len <= target_backups:
                 if (was_above_target_backups or was_above_target_backups is None):
-                    trace("Satisfied target number of backups: %s with %s",
+                    trace("Local> Satisfied target number of backups: %s with %s",
                           target_backups, dirs_len)
                     was_above_target_backups = False
                 if do_del is None:
@@ -401,13 +409,13 @@ def cleandir(operations, targets):
 
         next_del = first(sorted_value(dirs))
         if next_del is None:
-            trace("No more backups left")
+            trace("Local> No more backups left")
             break
         else:
             operations.unsnap(next_del)
 
 def transfer(operations, target_host, target_dir, link_dir):
-    """Transfer snapshots to remote host"""
+    # Transfer snapshots to remote host
 
     trace = operations.trace
 
@@ -433,11 +441,11 @@ def transfer(operations, target_host, target_dir, link_dir):
     parent =  max(parents)
     nparent = parent
 
-    trace("last possible parent = %s", parent)
+    trace("Remote> last possible parent = %s", parent)
 
     for s in sorted(localsnaps):
         if s > parent:
-            trace("transfer: parent=%s snap=%s", nparent, s)
+            trace("Remote> transfer: parent=%s snap=%s", nparent, s)
             operations.send_withparent(nparent, s, target_host, target_dir)
             if link_dir is not None:
                 operations.link_current(target_host, target_dir, s, link_dir)
@@ -456,6 +464,7 @@ def remotecleandir(operations, target_host, target_dir, remote_keep):
         else:
             delete_dirs = sorted_value(dirs)
             del_count = dirs_len - remote_keep
+            trace("Remote> about to remove %s of out of %s backups, keeping %s", del_count, dirs_len, remote_keep)
             for del_dir in itertools.islice(delete_dirs, del_count):
                 if del_dir is None:
                     trace("Remote> No more backups left")
