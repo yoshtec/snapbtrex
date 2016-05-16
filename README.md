@@ -66,7 +66,7 @@ ssh-copy-id snapbtr@123.45.56.78
 
 File: `/etc/sudoers.d/90_snapbtrrcv`
 
-Minumum content is this for recieving snapshots on a remote system:
+Minimum content is this for receiving snapshots on a remote system:
 ```
   snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs receive*
 ```
@@ -78,9 +78,9 @@ need another line (adopt path to your specific path):
   snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/ln -sfn /path/to/backups/* /path/to/current/current-link
 ```
 
-If you need remote pruning then add this:
+If you need remote pruning then add this (you can also add the path for more secure setup):
 ```
-  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs receive*
+  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs subvolume delete*
 ```
 
 Hint: on some Linux flavors you might find the btrfs tools in `/bin/btrfs` opposed to `/sbin/btrfs`, the sudoers files have to reflect that.

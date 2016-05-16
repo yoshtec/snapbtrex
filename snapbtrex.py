@@ -14,7 +14,9 @@
 # * remote linking to latest transferred snapshot
 # * logging improvements
 #
-# TODO: remote pruning
+# 20160516 1.3 (yt)
+# * remote deleting of snapshots
+#
 # TODO: remove shell = True for ssh stuff
 # TODO: change to different time format for integration with smaba vfs https://www.samba.org/samba/docs/man/manpages/vfs_shadow_copy2.8.html
 
@@ -96,7 +98,7 @@ need another line (adopt path to your specific path):
   snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/ln -sfn /path/to/backups/* /path/to/current/current-link
 --
 
-If you need remote pruning then add this:
+If you need remote pruning then add this (you can also add the path for more secure setup):
 --
   snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs subvolume delete*
 --
@@ -127,7 +129,7 @@ to ro snaps in the directory of the snapshots via:
 """
 
 
-import math, time, os, os.path, sys, statvfs
+import math, time, os, os.path, sys, statvfs, itertools
 
 # DATE_FORMAT = '%Y%m%d-%H%M%S' # date format used for directories to clean
 DATE_FORMAT = '%Y%m%d-%H%M%S'
@@ -149,6 +151,10 @@ def timef(x):
     except:
         v = None
     return v
+
+def first(it):
+    for x in it:
+        return x
 
 def sorted_value(dirs):
     if len(dirs) <= 0:
@@ -206,6 +212,7 @@ class Operations:
     def __init__(self, path, trace = None):
         self.tracef = trace
         self.path = path
+
     def check_call(self, args, shell=False):
         cmd_str = " ".join(args)
         self.trace("EXEC: " + cmd_str)
@@ -219,16 +226,20 @@ class Operations:
         if p.returncode != 0:
             raise Exception("failed %s" % cmd_str)
         return stdout # return the content
+
     def sync(self, dir):
         # syncing to be sure the operation is on the disc
         args = ["sudo", "btrfs", "filesystem", "sync", dir]
         self.check_call(args)
+
     def unsnap(self, dir):
         args = ["sudo", "btrfs", "subvolume", "delete",
                 os.path.join(self.path, dir)]
         self.check_call(args)
+
     def freespace(self):
         return freespace(self.path)
+
     def listdir(self):
         return [d for d in os.listdir(self.path) if timef(d)]
 
@@ -245,12 +256,15 @@ class Operations:
         self.check_call(args)
         self.sync(self.path) #yt: make sure the new snap is on the disk
         return newdir #yt: return the latest snapshot
+
     def datestamp(self):
         return time.strftime(DATE_FORMAT, time.gmtime(None))
+
     def trace(self, *args, **kwargs):
         f = self.tracef
         if f:
             f(*args, **kwargs)
+
     def send_single(self, dir, receiver, receiver_path):
         args = ["sudo btrfs send -v " +
                 os.path.join(self.path, dir) +
@@ -258,7 +272,7 @@ class Operations:
                 receiver +
                 " \' sudo btrfs receive " + receiver_path + " \'"]
         # TODO: breakup the pipe stuff and do it without shell=True, currently it has problems with pipes :(
-        self.check_call(args,shell=True)
+        self.check_call(args, shell=True)
 
     def send_withparent(self, parent_snap, snap, receiver, receiver_path):
         args = ["sudo btrfs send -v -p " +
@@ -273,6 +287,11 @@ class Operations:
 
     def link_current(self, receiver, receiver_path, snap, link_target):
         args = ["ssh", receiver, "sudo ln -sfn \'" + os.path.join(receiver_path,snap) + "\' " + link_target ]
+        self.check_call(args)
+
+    def remote_unsnap(self, receiver, receiver_path, dir):
+        args = ["ssh", receiver, "sudo btrfs subvolume delete \'" +
+                os.path.join(receiver_path, dir) + "\'"]
         self.check_call(args)
 
 
@@ -309,8 +328,9 @@ class FakeOperations(Operations):
         return self.dirs.iterkeys()
 
     def listremote_dir(self, receiver, receiver_path):
-        self.trace("listremotedir() r=%s, rp=%s", receiver, receiver_path)
-        return ['20101201-030000', '20101201-040000', '20101201-050000']
+        dirs = ['20101201-030000', '20101201-040000', '20101201-050000', '20101201-070000']
+        self.trace("listremotedir() r=%s, rp=%s, values=%s", receiver, receiver_path, dirs)
+        return dirs
 
     def freespace(self):
         self.trace("freespace() = %s", self.space)
@@ -321,7 +341,7 @@ class FakeOperations(Operations):
         self.trace("EXEC: " + cmd_str)
 
 def cleandir(operations, targets):
-    """Perform actual cleanup using 'operations' until 'targets' are met"""
+    # Perform actual cleanup using 'operations' until 'targets' are met
     trace = operations.trace
     keep_backups = targets.keep_backups
     target_fsp = targets.target_freespace
@@ -329,9 +349,6 @@ def cleandir(operations, targets):
     was_above_target_freespace = None
     was_above_target_backups = None
     last_dirs = []
-    def first(it):
-        for x in it:
-            return x
 
     while True:
         do_del = None
@@ -348,7 +365,7 @@ def cleandir(operations, targets):
 
         if keep_backups is not None:
             if dirs_len <= keep_backups:
-                print "Reached number of backups to keep: ", dirs_len
+                trace("Reached number of backups to keep: %s ", dirs_len)
                 break
 
         if target_fsp is not None:
@@ -427,6 +444,25 @@ def transfer(operations, target_host, target_dir, link_dir):
             # advance one step
             nparent=s
 
+def remotecleandir(operations, target_host, target_dir, remote_keep):
+    # Perform remote cleanup using 'operations' until exactly remote_keep backups are left
+    trace = operations.trace
+
+    if remote_keep is not None:
+        dirs = sorted(operations.listremote_dir(receiver=target_host, receiver_path=target_dir))
+        dirs_len = len(dirs)
+        if dirs_len <= remote_keep or remote_keep <= 0:
+            trace("Remote> No remote directories to clean, currently %s remote backups, should keep %s", dirs_len, remote_keep)
+        else:
+            delete_dirs = sorted_value(dirs)
+            del_count = dirs_len - remote_keep
+            for del_dir in itertools.islice(delete_dirs, del_count):
+                if del_dir is None:
+                    trace("Remote> No more backups left")
+                    break
+                else:
+                    operations.remote_unsnap(target_host, target_dir, del_dir)
+
 
 def log_trace(fmt, *args, **kwargs):
     tt = time.strftime(DATE_FORMAT, time.gmtime(None)) + ": "
@@ -500,7 +536,7 @@ def main(argv):
             metavar = 'SIZE',
             default = None,
             type = Space,
-            help = '''Cleanup PATH until at least SIZE is free. SIZE is #bytes, or given with K, M, G or T respectively for kilo, ...''')
+            help = 'Cleanup PATH until at least SIZE is free. SIZE is #bytes, or given with K, M, G or T respectively for kilo, ...')
 
         target_group.add_argument('--target-backups', '-B',
             dest='target_backups',
@@ -542,7 +578,7 @@ def main(argv):
 
         transfer_group = parser.add_argument_group(
             title = 'Transfer',
-            description = 'Transfer Snapshots to other hosts. It is assumed that the user running the script is run can connect to the remote host via keys and without passwords. See --explain for more info')
+            description = 'Transfer snapshots to other hosts. It is assumed that the user running the script is run can connect to the remote host via keys and without passwords. See --explain for more info')
 
         transfer_group.add_argument('--remote-host',
             metavar = 'HOST',
@@ -552,13 +588,18 @@ def main(argv):
         transfer_group.add_argument('--remote-dir',
             metavar = 'PATH',
             dest = 'remote_dir',
-            help = 'Transfer the snapshot to this directory on the target host')
+            help = 'Transfer the snapshot to this PATH on the target host')
 
         transfer_group.add_argument('--remote-link',
-            metavar = 'PATH',
+            metavar = 'LINK',
             dest = 'remote_link',
-            help = 'link the transferred snapshot to this PATH')
+            help = 'link the transferred snapshot to this LINK')
 
+        transfer_group.add_argument('--remote-keep',
+            metavar = 'B',
+            type = int,
+            dest = 'remote_keep',
+            help = 'Cleanup remote backups until B backups remain, if unset keep all remote transferred backups')
 
         pa = parser.parse_args(argv[1:])
         return pa, parser
@@ -568,6 +609,7 @@ def main(argv):
         if sys.stdout.isatty():
             trace = default_trace
         else:
+            # use logging with timestamps on script output
             trace = log_trace
     else:
         trace = None
@@ -606,6 +648,8 @@ def main(argv):
 
     if not (pa.remote_host is None and pa.remote_dir is None ):
         transfer(operations, pa.remote_host, pa.remote_dir, pa.remote_link)
+        if not pa.remote_keep is None:
+            remotecleandir(operations, pa.remote_host, pa.remote_dir, pa.remote_keep)
 
     cleandir(operations = operations, targets = pa)
 
