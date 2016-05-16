@@ -4,7 +4,7 @@ and optionally send it to a remote system.
 
 The script came originally from https://btrfs.wiki.kernel.org/index.php/SnapBtr
 it is an extended version which is capable of transferring snapshots to remote
- systems.
+systems.
 
 You can run it regularly (for example in a small script in
 cron.hourly), or once in a while, to maintain an "interesting" (see
@@ -31,18 +31,15 @@ The scoring mechanism integrates e^x from (now-newer) to (now-older)
 so, new pairs will have high value, even if they are tightly packed,
 while older pairs will have high value if they are far apart.
 
-The mechanism is completely self-contained and you can delete any
-snapshot manually or any files in the snapshots.
-
 
 ## Transferring Snapshots to Remote Host
 
-snapbtrex uses the btrfs send and recieve commands to transfer
-snapshots from a sendin host to a receiving host.
+snapbtrex uses the btrfs send and receive commands to transfer
+snapshots from a sending host to a receiving host.
 
 Both hosts have to be prepared as in the setup instructions if
 you want to call the script via cronjob. You can always call snapbtrex
-as standalone script if you have appropiate rights.
+as standalone script if you have appropriate rights.
 
 ### Setup instructions
 transfer with backups with ssh
@@ -68,22 +65,24 @@ File: `/etc/sudoers.d/90_snapbtrrcv`
 
 Minimum content is this for receiving snapshots on a remote system:
 ```
-  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs receive*
+snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs receive*
 ```
 
-If you want to link the latest transferred item remotely to path then you'll
+If you want to link the latest transferred snapshot remotely with `--remote-link` then you'll
 need another line (adopt path to your specific path):
 
 ```
-  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/ln -sfn /path/to/backups/* /path/to/current/current-link
+snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/ln -sfn /path/to/backups/* /path/to/current/current-link
 ```
 
-If you need remote pruning then add this (you can also add the path for more secure setup):
+If you want remote pruning of snapshots via `--remote-keep` option, then add this (you can
+also include the path for a more secure setup):
 ```
-  snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs subvolume delete*
+snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs subvolume delete*
 ```
 
-Hint: on some Linux flavors you might find the btrfs tools in `/bin/btrfs` opposed to `/sbin/btrfs`, the sudoers files have to reflect that.
+Hint: on some Linux flavors you might find the btrfs tools in `/sbin/btrfs` opposed to
+`/bin/btrfs`, the sudoers files have to reflect that.
 
 4\. Create a sudoers include file on the sending machine
 
@@ -98,7 +97,7 @@ snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs filesystem sync*
 
 
 ## Precautions
-If you created your snapshots with an old version of snapbtr than those
+If you created your snapshots with an older version of snapbtr than those
 snapshots were created as read/write snapshots. The sending of snapshots
 to remote hosts demands that those snaps are read only. You can change rw snaps
 to ro snaps in the directory of the snapshots via:
@@ -111,5 +110,5 @@ sudo find . -maxdepth 1 -type d -exec btrfs property set -t s {} ro true \;
 
 Snapshot and transfer to remote host every day at 4:10 am, keep 52 snapshots on the origin host.
 ```
-10 4    * * *   snapbtr /opt/snapbtr/snapbtrex.py --path /mnt/btrfs/.mysnapshots/subvol1/ --snap /mnt/btrfs/@subvol1/ --target-backups 52 --verbose --remote-host 123.45.56.78 --remote-dir /mnt/btrfs/.backup/subvol1/  >> /var/log/snapbtrex.log
+10 4    * * *   snapbtr /opt/snapbtrex/snapbtrex.py --path /mnt/btrfs/.mysnapshots/subvol1/ --snap /mnt/btrfs/@subvol1/ --target-backups 52 --verbose --remote-host 123.45.56.78 --remote-dir /mnt/btrfs/.backup/subvol1/  >> /var/log/snapbtrex.log
 ```
