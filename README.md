@@ -2,12 +2,12 @@
 snapbtrex is a small utility that keeps snapshots of btrfs filesystems
 and optionally send it to a remote system.
 
-The script came originally from https://btrfs.wiki.kernel.org/index.php/SnapBtr
-it is an extended version which is capable of transferring snapshots to remote
+The script came originally from https://btrfs.wiki.kernel.org/index.php/SnapBtr .
+This is an extended version which is capable of transferring snapshots to remote
 systems.
 
 You can run it regularly (for example in a small script in
-cron.hourly), or once in a while, to maintain an "interesting" (see
+cron.hourly or in crontab), or once in a while, to maintain an "interesting" (see
 below) set of snapshots (backups). You may manually add or remove
 snapshots as you like, use `snapbtrex.DATE_FORMAT` (in GMT) as
 snapshot-name.
@@ -24,7 +24,7 @@ you go back in time. It does this by selecting snapshots to remove as
 follows.
 
 The snapshots to remove is selected by "scoring" each space between
-snapshots, (newer,older). snapbtrex will remove the older of the two
+snapshots, (newer, older). snapbtrex will remove the older of the two
 snapshots in the space that have the lowest score.
 
 The scoring mechanism integrates e^x from (now-newer) to (now-older)
@@ -35,14 +35,20 @@ while older pairs will have high value if they are far apart.
 ## Transferring Snapshots to Remote Host
 
 snapbtrex uses the btrfs send and receive commands to transfer
-snapshots from a sending host to a receiving host.
+snapshots from a sending host to a receiving host via ssh.
 
 Both hosts have to be prepared as in the setup instructions if
 you want to call the script via cronjob. You can always call snapbtrex
 as standalone script if you have appropriate rights.
 
+Specify your target host via  `--remote-host` and the directory with
+the `--remote-dir` options. Both options have to be present. The target directory
+has to be located within a btrfs file system and it has to be mounted via the
+root volume, or else btrfs might fail to receive snapshots.
+
 ### Setup instructions
-transfer with backups with ssh
+For transfer backups with ssh within an automated script (cronjob) you have to
+prepare the systems with the following steps.
 
 1\. create user `snapbtr` on both systems
 ```sh
@@ -68,21 +74,17 @@ Minimum content is this for receiving snapshots on a remote system:
 snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs receive*
 ```
 
-If you want to link the latest transferred snapshot remotely with `--remote-link` then you'll
-need another line (adopt path to your specific path):
+If you want to link the latest transferred snapshot remotely with `--remote-link`
+then you will need another line (adopt path to your specific path):
 
 ```
 snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/ln -sfn /path/to/backups/* /path/to/current/current-link
 ```
 
-If you want remote pruning of snapshots via `--remote-keep` option, then add this (you can
-also include the path for a more secure setup):
+If you want remote pruning of snapshots via `--remote-keep` option, then add this:
 ```
 snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs subvolume delete*
 ```
-
-Hint: on some Linux flavors you might find the btrfs tools in `/sbin/btrfs` opposed to
-`/bin/btrfs`, the sudoers files have to reflect that.
 
 4\. Create a sudoers include file on the sending machine
 
@@ -94,11 +96,17 @@ snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs send*
 snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs subvolume*
 snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs filesystem sync*
 ```
+Hint 1: For a more secure setup you should include the specific paths at the
+sudoers files.
+
+Hint 2: On some Linux flavors you might find the btrfs tools in `/sbin/btrfs`
+opposed to `/bin/btrfs`, the sudoers files have to reflect that.
 
 
-## Precautions
-If you created your snapshots with an older version of snapbtr than those
-snapshots were created as read/write snapshots. The sending of snapshots
+## Migrating from SnapBtr
+
+If you created snapshots with [snapbtr](https://btrfs.wiki.kernel.org/index.php/SnapBtr)
+then those snapshots were created as read/write snapshots. The sending of snapshots
 to remote hosts demands that those snaps are read only. You can change rw snaps
 to ro snaps in the directory of the snapshots via:
 
@@ -106,9 +114,26 @@ to ro snaps in the directory of the snapshots via:
 sudo find . -maxdepth 1 -type d -exec btrfs property set -t s {} ro true \;
 ```
 
-## Crontab Examples
+## Examples
 
-Snapshot and transfer to remote host every day at 4:10 am, keep 52 snapshots on the origin host.
+### Shell
+
+Snapshot a volume and keep 20 versions:
+```sh
+sudo snapbtrex.py --snap /mnt/btrfs/@subvol1/ --path /mnt/btrfs/.mysnapshots/subvol1/ --target-backups 20
 ```
-10 4    * * *   snapbtr /opt/snapbtrex/snapbtrex.py --path /mnt/btrfs/.mysnapshots/subvol1/ --snap /mnt/btrfs/@subvol1/ --target-backups 52 --verbose --remote-host 123.45.56.78 --remote-dir /mnt/btrfs/.backup/subvol1/  >> /var/log/snapbtrex.log
+
+### Crontab
+
+Snapshot and transfer to remote host every day at 4:10 am, keep 52 snapshots on
+the origin host (keeps all remote backups, unless you delete them manually)
+```
+10 4    * * *   snapbtr /opt/snapbtrex/snapbtrex.py --snap /mnt/btrfs/@subvol1/ --path /mnt/btrfs/.mysnapshots/subvol1/ --target-backups 52 --verbose --remote-host 123.45.56.78 --remote-dir /mnt/btrfs/.backup/subvol1/  >> /var/log/snapbtrex.log
+```
+
+
+Snapshot and transfer to remote host every day at 4:20 am, keep 10 snapshots on
+the origin host and keep only 50 snapshots on the remote host.
+```
+20 4    * * *   snapbtr /opt/snapbtrex/snapbtrex.py --snap /mnt/btrfs/@subvol2/ --path /mnt/btrfs/.mysnapshots/subvol2/ --target-backups 10 --verbose --remote-host 123.45.56.78 --remote-dir /mnt/btrfs/.backup/subvol2/ --remote-keep 50 >> /var/log/snapbtrex.log
 ```
