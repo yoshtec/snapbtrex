@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2.7
 # -*- coding: utf-8 -*-
 #
 # Autor: Helge Jensen <hej@actua.dk>
@@ -260,9 +260,9 @@ class Operations:
     def listdir(self):
         return [d for d in os.listdir(self.path) if timef(d)]
 
-    def listremote_dir(self, receiver, receiver_path):
+    def listremote_dir(self, receiver, receiver_path, ssh_port):
         self.trace(LOG_REMOTE + "list remote files host=%s, dir=%s", receiver, receiver_path)
-        args = ["ssh", receiver, "ls -1 " + receiver_path]
+        args = ["ssh", "-p", ssh_port, receiver, "ls -1 " + receiver_path]
         return [d for d in self.check_call(args).splitlines() if timef(d)]
 
     def snap(self, path):
@@ -285,22 +285,24 @@ class Operations:
         if f:
             f(*args, **kwargs)
 
-    def send_single(self, dir, receiver, receiver_path):
+    def send_single(self, dir, receiver, receiver_path, ssh_port):
         self.trace(LOG_REMOTE + "send single snapshot from %s to host %s path=%s", dir, receiver, receiver_path)
         args = ["sudo btrfs send -v " +
                 os.path.join(self.path, dir) +
-                "| pv -brtf | ssh " +
+                "| pv -brtf | ssh -p " +
+		ssh_port + " " +
                 receiver +
                 " \' sudo btrfs receive " + receiver_path + " \'"]
         # TODO: breakup the pipe stuff and do it without shell=True, currently it has problems with pipes :(
         self.check_call(args, shell=True)
 
-    def send_withparent(self, parent_snap, snap, receiver, receiver_path):
+    def send_withparent(self, parent_snap, snap, receiver, receiver_path, ssh_port):
         self.trace(LOG_REMOTE + "send snapshot from %s with parent %s to host %s path=%s", snap, parent_snap, receiver, receiver_path)
         args = ["sudo btrfs send -v -p " +
                 os.path.join(self.path, parent_snap) + " " +
                 os.path.join(self.path, snap) +
-                " | pv -brtf | " + "ssh " +
+                " | pv -brtf | " + "ssh -p " +
+		ssh_port + " " +	
                 receiver +
                 " \'sudo btrfs receive -v " +
                 receiver_path +  " \'"
@@ -308,14 +310,14 @@ class Operations:
         self.check_call(args, shell=True)
         self.trace(LOG_REMOTE + "finished sending snapshot")
 
-    def link_current(self, receiver, receiver_path, snap, link_target):
+    def link_current(self, receiver, receiver_path, snap, link_target, ssh_port):
         self.trace(LOG_REMOTE + "linking current snapshot host=%s path=%s snap=%s link=%s", receiver, receiver_path, snap, link_target)
-        args = ["ssh", receiver, "sudo ln -sfn \'" + os.path.join(receiver_path,snap) + "\' " + link_target ]
+        args = ["ssh", "-p", ssh_port, receiver, "sudo ln -sfn \'" + os.path.join(receiver_path,snap) + "\' " + link_target ]
         self.check_call(args)
 
-    def remote_unsnap(self, receiver, receiver_path, dir):
+    def remote_unsnap(self, receiver, receiver_path, dir, ssh_port):
         self.trace(LOG_REMOTE + "delete snapshot %s from host=%s path=%s", dir, receiver, receiver_path)
-        args = ["ssh", receiver, "sudo btrfs subvolume delete \'" +
+        args = ["ssh", "-p", ssh_port, receiver, "sudo btrfs subvolume delete \'" +
                 os.path.join(receiver_path, dir) + "\'"]
         self.check_call(args)
         self.trace(LOG_REMOTE + "deleted")
@@ -432,13 +434,13 @@ def cleandir(operations, targets):
         else:
             operations.unsnap(next_del)
 
-def transfer(operations, target_host, target_dir, link_dir):
+def transfer(operations, target_host, target_dir, link_dir, ssh_port):
     # Transfer snapshots to remote host
 
     trace = operations.trace
 
     # find out what kind of snapshots exist on the remote host
-    targetsnaps = set(operations.listremote_dir(target_host, target_dir))
+    targetsnaps = set(operations.listremote_dir(target_host, target_dir, ssh_port))
     localsnaps = set(operations.listdir())
 
     if len(localsnaps) == 0:
@@ -451,7 +453,7 @@ def transfer(operations, target_host, target_dir, link_dir):
     if len(parents) == 0:
         # start transferring the oldest snapshot
         # by that snapbtrex will transfer all snapshots that have been created
-        operations.send_single( min(localsnaps), target_host, target_dir)
+        operations.send_single( min(localsnaps), target_host, target_dir, ssh_port)
         parents.add(min(localsnaps))
 
 
@@ -464,18 +466,18 @@ def transfer(operations, target_host, target_dir, link_dir):
     for s in sorted(localsnaps):
         if s > parent:
             trace(LOG_REMOTE + "transfer: parent=%s snap=%s", nparent, s)
-            operations.send_withparent(nparent, s, target_host, target_dir)
+            operations.send_withparent(nparent, s, target_host, target_dir, ssh_port)
             if link_dir is not None:
-                operations.link_current(target_host, target_dir, s, link_dir)
+                operations.link_current(target_host, target_dir, s, link_dir, ssh_port)
             # advance one step
             nparent=s
 
-def remotecleandir(operations, target_host, target_dir, remote_keep):
+def remotecleandir(operations, target_host, target_dir, remote_keep, ssh_port):
     # Perform remote cleanup using 'operations' until exactly remote_keep backups are left
     trace = operations.trace
 
     if remote_keep is not None:
-        dirs = sorted(operations.listremote_dir(receiver=target_host, receiver_path=target_dir))
+        dirs = sorted(operations.listremote_dir(receiver=target_host, receiver_path=target_dir, ssh_port=ssh_port))
         dirs_len = len(dirs)
         if dirs_len <= remote_keep or remote_keep <= 0:
             trace(LOG_REMOTE + "No remote directories to clean, currently %s remote backups, should keep %s", dirs_len, remote_keep)
@@ -488,7 +490,7 @@ def remotecleandir(operations, target_host, target_dir, remote_keep):
                     trace(LOG_REMOTE + "No more backups left")
                     break
                 else:
-                    operations.remote_unsnap(target_host, target_dir, del_dir)
+                    operations.remote_unsnap(target_host, target_dir, del_dir, ssh_port)
 
 
 def log_trace(fmt, *args, **kwargs):
@@ -628,6 +630,12 @@ def main(argv):
             dest = 'remote_keep',
             help = 'Cleanup remote backups until B backups remain, if unset keep all remote transferred backups')
 
+	transfer_group.add_argument('--ssh-port',
+            metavar = 'SSHPORT',
+            dest = 'ssh_port',
+	    default = '22',
+            help = 'SSH port')
+
         pa = parser.parse_args(argv[1:])
         return pa, parser
 
@@ -673,9 +681,9 @@ def main(argv):
        operations.snap(path = pa.snap)
 
     if not (pa.remote_host is None and pa.remote_dir is None ):
-        transfer(operations, pa.remote_host, pa.remote_dir, pa.remote_link)
+        transfer(operations, pa.remote_host, pa.remote_dir, pa.remote_link, pa.ssh_port)
         if not pa.remote_keep is None:
-            remotecleandir(operations, pa.remote_host, pa.remote_dir, pa.remote_keep)
+            remotecleandir(operations, pa.remote_host, pa.remote_dir, pa.remote_keep, pa.ssh_port)
 
     if not (pa.target_freespace is None and pa.target_backups is None):
         if pa.keep_backups == DEFAULT_KEEP_BACKUPS:
