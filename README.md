@@ -35,7 +35,9 @@ while older pairs will have high value if they are far apart.
 ## Transferring Snapshots to Remote Host
 
 snapbtrex uses the btrfs send and receive commands to transfer
-snapshots from a sending host to a receiving host via ssh.
+snapshots from a sending host to a receiving host via ssh. Using `--ssh-port`, 
+you can specify the port on which such ssh connections will be 
+attempted. 
 
 Both hosts have to be prepared as in the setup instructions if
 you want to call the script via cronjob. You can always call snapbtrex
