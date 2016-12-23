@@ -510,6 +510,9 @@ def default_trace(fmt, *args, **kwargs):
     else:
         print fmt
 
+def null_trace(fmt, *args, **kwargs):
+    pass
+
 def main(argv):
     def args():
         import argparse
@@ -649,7 +652,7 @@ def main(argv):
             # use logging with timestamps on script output
             trace = log_trace
     else:
-        trace = None
+        trace = null_trace
 
     if pa.explain:
         sys.stdout.write(__doc__)
