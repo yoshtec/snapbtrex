@@ -152,14 +152,29 @@ def timef(x):
     # make value inverse exponential in the time passed
     try:
         v = math.exp(
-            time.mktime(
-                time.strptime(
-                    os.path.split(x)[1],
-                    DATE_FORMAT))
+            _timestamp(x)
             /TIME_SCALE)
     except:
         v = None
     return v
+
+def timestamp(x):
+    try:
+        v = _timestamp(x)
+    except:
+        v = None
+    return v
+
+def _timestamp(x):
+    return time.mktime(
+               time.strptime(
+                   os.path.split(x)[1],
+                   DATE_FORMAT))
+
+def sorted_age(dirs, max_age):
+    for xv, x in sorted((timestamp(y), y) for y in dirs):
+        if xv < max_age:
+            yield x
 
 def first(it):
     for x in it:
@@ -277,8 +292,8 @@ class Operations:
         self.trace(LOG_LOCAL + "done snapshotting ")
         return newdir #yt: return the latest snapshot
 
-    def datestamp(self):
-        return time.strftime(DATE_FORMAT, time.gmtime(None))
+    def datestamp(self, secs = None):
+        return time.strftime(DATE_FORMAT, time.gmtime(secs))
 
     def trace(self, *args, **kwargs):
         f = self.tracef
@@ -374,6 +389,7 @@ def cleandir(operations, targets):
     keep_backups = targets.keep_backups
     target_fsp = targets.target_freespace
     target_backups = targets.target_backups
+    max_age = targets.max_age
     was_above_target_freespace = None
     was_above_target_backups = None
     last_dirs = []
@@ -427,7 +443,14 @@ def cleandir(operations, targets):
         if not do_del:
             break
 
-        next_del = first(sorted_value(dirs))
+        next_del = None
+        if max_age is not None:
+            next_del = first(sorted_age(dirs, max_age))
+        if next_del is None:
+            next_del = first(sorted_value(dirs))
+        else:
+            trace(LOG_LOCAL + "found backup older than: '%s'",
+                    operations.datestamp(max_age))
         if next_del is None:
             trace(LOG_LOCAL + "No more backups left")
             break
@@ -516,21 +539,16 @@ def null_trace(fmt, *args, **kwargs):
 def main(argv):
     def args():
         import argparse
-        class Space(int):
+        class UnitInt(int):
             @staticmethod
-            def parse_target_freespace(target_str):
+            def parse(cls, target_str):
                 import re
-                mods = {
-                    None: 0,
-                    'K': 1,
-                    'M': 2,
-                    'G': 3 }
-                form = "([0-9]+)(%s)?" % \
-                    "|".join(x for x in mods.iterkeys() if x is not None)
+                form = cls.format % \
+                    "|".join(x for x in cls.mods.iterkeys() if x is not None)
                 m = re.match(form, target_str, re.IGNORECASE)
                 if m:
                     val, mod = m.groups()
-                    return int(val) * 1024**mods[mod]
+                    return cls.eval(int(val), mod)
                 else:
                     raise "Invalid value: %s, expected: %s" % (target_str, form)
 
@@ -541,13 +559,48 @@ def main(argv):
                 self.origin = value
             def __new__(cls, value=0):
                 if isinstance(value, (str, unicode)):
-                    value = Space.parse_target_freespace(value)
-                return super(Space, cls).__new__(cls, value)
+                    value = UnitInt.parse(cls, value)
+                return super(UnitInt, cls).__new__(cls, value)
             def __str__(self):
                 if isinstance(self.origin, int):
                     return str(self.origin)
                 else:
                     return "%s[%s]" % (self.origin, int(self))
+
+        class Space(UnitInt):
+            format = "([0-9]+)(%s)?"
+            mods = {
+                None: 0,
+                'K': 1,
+                'M': 2,
+                'G': 3 }
+
+            @staticmethod
+            def eval(val, mod):
+                return val * 1024**Space.mods[mod]
+
+        class Age(UnitInt):
+            format = "([0-9]+)(%s)?" 
+            mods = {
+                None: 1,
+                's': 1,
+                'm': 60,
+                'h': 60*60,
+                'd': 24*60*60,
+                'w': 7*24*60*60,
+                'y': (52*7+1)*24*60*60 } # year = 52 weeks + 1 or 2 days
+
+            @staticmethod
+            def eval(val, mod):
+                return max(0, time.time() - val * Age.mods[mod])
+
+        def parse_ageoffset_to_timestamp(age_str):
+            now = time.time()
+            age = int(age_str)
+            if age > now:
+                raise "Invalid value: %d, expected less than: %d" % (age, now)
+            else:
+                return float(now - age)
 
         parser = argparse.ArgumentParser(
             description = 'keeps btrfs snapshots for backup',
@@ -581,6 +634,13 @@ def main(argv):
             type = int,
             default = DEFAULT_KEEP_BACKUPS,
             help = 'Stop cleaning when K backups remain')
+
+        target_group.add_argument('--max-age', '-A',
+            dest = 'max_age',
+            metavar = 'MAX_AGE',
+            default = None,
+            type = Age,
+            help = 'Prefer removal of backups older than MAX_AGE seconds. MAX_AGE is #seconds, or given with m (minutes), h (hours), d (days), w (weeks), y (years = 52w + 1d).')
 
         snap_group_x = parser.add_argument_group(title = 'Snapshotting')
         snap_group = parser.add_mutually_exclusive_group(required=False)
