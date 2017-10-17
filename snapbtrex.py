@@ -300,24 +300,24 @@ class Operations:
         if f:
             f(*args, **kwargs)
 
-    def send_single(self, dir, receiver, receiver_path, ssh_port):
+    def send_single(self, dir, receiver, receiver_path, ssh_port, rate_limit):
         self.trace(LOG_REMOTE + "send single snapshot from %s to host %s path=%s", dir, receiver, receiver_path)
         args = ["sudo btrfs send -v " +
                 os.path.join(self.path, dir) +
-                "| pv -brtf | ssh -p " +
-		ssh_port + " " +
+                "| pv -brtfL " + rate_limit + " | ssh -p " +
+                ssh_port + " " +
                 receiver +
                 " \' sudo btrfs receive " + receiver_path + " \'"]
         # TODO: breakup the pipe stuff and do it without shell=True, currently it has problems with pipes :(
         self.check_call(args, shell=True)
 
-    def send_withparent(self, parent_snap, snap, receiver, receiver_path, ssh_port):
+    def send_withparent(self, parent_snap, snap, receiver, receiver_path, ssh_port, rate_limit):
         self.trace(LOG_REMOTE + "send snapshot from %s with parent %s to host %s path=%s", snap, parent_snap, receiver, receiver_path)
         args = ["sudo btrfs send -v -p " +
                 os.path.join(self.path, parent_snap) + " " +
                 os.path.join(self.path, snap) +
-                " | pv -brtf | " + "ssh -p " +
-		ssh_port + " " +	
+                " | pv -brtfL " + rate_limit + " | ssh -p " +
+                ssh_port + " " +
                 receiver +
                 " \'sudo btrfs receive -v " +
                 receiver_path +  " \'"
@@ -457,7 +457,7 @@ def cleandir(operations, targets):
         else:
             operations.unsnap(next_del)
 
-def transfer(operations, target_host, target_dir, link_dir, ssh_port):
+def transfer(operations, target_host, target_dir, link_dir, ssh_port, rate_limit):
     # Transfer snapshots to remote host
 
     trace = operations.trace
@@ -476,7 +476,7 @@ def transfer(operations, target_host, target_dir, link_dir, ssh_port):
     if len(parents) == 0:
         # start transferring the oldest snapshot
         # by that snapbtrex will transfer all snapshots that have been created
-        operations.send_single( min(localsnaps), target_host, target_dir, ssh_port)
+        operations.send_single( min(localsnaps), target_host, target_dir, ssh_port, rate_limit)
         parents.add(min(localsnaps))
 
 
@@ -489,7 +489,7 @@ def transfer(operations, target_host, target_dir, link_dir, ssh_port):
     for s in sorted(localsnaps):
         if s > parent:
             trace(LOG_REMOTE + "transfer: parent=%s snap=%s", nparent, s)
-            operations.send_withparent(nparent, s, target_host, target_dir, ssh_port)
+            operations.send_withparent(nparent, s, target_host, target_dir, ssh_port, rate_limit)
             if link_dir is not None:
                 operations.link_current(target_host, target_dir, s, link_dir, ssh_port)
             # advance one step
@@ -693,11 +693,19 @@ def main(argv):
             dest = 'remote_keep',
             help = 'Cleanup remote backups until B backups remain, if unset keep all remote transferred backups')
 
-	transfer_group.add_argument('--ssh-port',
+        transfer_group.add_argument('--ssh-port',
             metavar = 'SSHPORT',
             dest = 'ssh_port',
-	    default = '22',
+            default = '22',
             help = 'SSH port')
+
+        transfer_group.add_argument('--rate-limit',
+            metavar = 'RATE',
+            dest = 'rate_limit',
+            default = '0',
+            help = 'Limit the transfer to a maximum of RATE bytes per ' + \
+                   'second. A suffix of "k", "m", "g", or "t" can be added' + \
+                   ' to denote kilobytes (*1024), megabytes, and so on.')
 
         pa = parser.parse_args(argv[1:])
         return pa, parser
@@ -744,7 +752,7 @@ def main(argv):
        operations.snap(path = pa.snap)
 
     if not (pa.remote_host is None and pa.remote_dir is None ):
-        transfer(operations, pa.remote_host, pa.remote_dir, pa.remote_link, pa.ssh_port)
+        transfer(operations, pa.remote_host, pa.remote_dir, pa.remote_link, pa.ssh_port, pa.rate_limit)
         if not pa.remote_keep is None:
             remotecleandir(operations, pa.remote_host, pa.remote_dir, pa.remote_keep, pa.ssh_port)
 
