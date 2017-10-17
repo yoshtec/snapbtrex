@@ -305,7 +305,7 @@ class Operations:
         args = ["sudo btrfs send -v " +
                 os.path.join(self.path, dir) +
                 "| pv -brtf | ssh -p " +
-		ssh_port + " " +
+                ssh_port + " " +
                 receiver +
                 " \' sudo btrfs receive " + receiver_path + " \'"]
         # TODO: breakup the pipe stuff and do it without shell=True, currently it has problems with pipes :(
@@ -317,7 +317,7 @@ class Operations:
                 os.path.join(self.path, parent_snap) + " " +
                 os.path.join(self.path, snap) +
                 " | pv -brtf | " + "ssh -p " +
-		ssh_port + " " +	
+                ssh_port + " " +
                 receiver +
                 " \'sudo btrfs receive -v " +
                 receiver_path +  " \'"
@@ -693,10 +693,10 @@ def main(argv):
             dest = 'remote_keep',
             help = 'Cleanup remote backups until B backups remain, if unset keep all remote transferred backups')
 
-	transfer_group.add_argument('--ssh-port',
+        transfer_group.add_argument('--ssh-port',
             metavar = 'SSHPORT',
             dest = 'ssh_port',
-	    default = '22',
+            default = '22',
             help = 'SSH port')
 
         pa = parser.parse_args(argv[1:])
