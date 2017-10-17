@@ -300,23 +300,23 @@ class Operations:
         if f:
             f(*args, **kwargs)
 
-    def send_single(self, dir, receiver, receiver_path, ssh_port):
+    def send_single(self, dir, receiver, receiver_path, ssh_port, rate_limit):
         self.trace(LOG_REMOTE + "send single snapshot from %s to host %s path=%s", dir, receiver, receiver_path)
         args = ["sudo btrfs send -v " +
                 os.path.join(self.path, dir) +
-                "| pv -brtf | ssh -p " +
+                "| pv -brtfL " + rate_limit + " | ssh -p " +
                 ssh_port + " " +
                 receiver +
                 " \' sudo btrfs receive " + receiver_path + " \'"]
         # TODO: breakup the pipe stuff and do it without shell=True, currently it has problems with pipes :(
         self.check_call(args, shell=True)
 
-    def send_withparent(self, parent_snap, snap, receiver, receiver_path, ssh_port):
+    def send_withparent(self, parent_snap, snap, receiver, receiver_path, ssh_port, rate_limit):
         self.trace(LOG_REMOTE + "send snapshot from %s with parent %s to host %s path=%s", snap, parent_snap, receiver, receiver_path)
         args = ["sudo btrfs send -v -p " +
                 os.path.join(self.path, parent_snap) + " " +
                 os.path.join(self.path, snap) +
-                " | pv -brtf | " + "ssh -p " +
+                " | pv -brtfL " + rate_limit + " | ssh -p " +
                 ssh_port + " " +
                 receiver +
                 " \'sudo btrfs receive -v " +
@@ -698,6 +698,14 @@ def main(argv):
             dest = 'ssh_port',
             default = '22',
             help = 'SSH port')
+
+        transfer_group.add_argument('--rate-limit',
+            metavar = 'RATE',
+            dest = 'rate_limit',
+            default = '0',
+            help = 'Limit the transfer to a maximum of RATE bytes per ' + \
+                   'second. A suffix of "k", "m", "g", or "t" can be added' + \
+                   ' to denote kilobytes (*1024), megabytes, and so on.')
 
         pa = parser.parse_args(argv[1:])
         return pa, parser
