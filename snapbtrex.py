@@ -457,7 +457,7 @@ def cleandir(operations, targets):
         else:
             operations.unsnap(next_del)
 
-def transfer(operations, target_host, target_dir, link_dir, ssh_port):
+def transfer(operations, target_host, target_dir, link_dir, ssh_port, rate_limit):
     # Transfer snapshots to remote host
 
     trace = operations.trace
@@ -476,7 +476,7 @@ def transfer(operations, target_host, target_dir, link_dir, ssh_port):
     if len(parents) == 0:
         # start transferring the oldest snapshot
         # by that snapbtrex will transfer all snapshots that have been created
-        operations.send_single( min(localsnaps), target_host, target_dir, ssh_port)
+        operations.send_single( min(localsnaps), target_host, target_dir, ssh_port, rate_limit)
         parents.add(min(localsnaps))
 
 
@@ -489,7 +489,7 @@ def transfer(operations, target_host, target_dir, link_dir, ssh_port):
     for s in sorted(localsnaps):
         if s > parent:
             trace(LOG_REMOTE + "transfer: parent=%s snap=%s", nparent, s)
-            operations.send_withparent(nparent, s, target_host, target_dir, ssh_port)
+            operations.send_withparent(nparent, s, target_host, target_dir, ssh_port, rate_limit)
             if link_dir is not None:
                 operations.link_current(target_host, target_dir, s, link_dir, ssh_port)
             # advance one step
@@ -752,7 +752,7 @@ def main(argv):
        operations.snap(path = pa.snap)
 
     if not (pa.remote_host is None and pa.remote_dir is None ):
-        transfer(operations, pa.remote_host, pa.remote_dir, pa.remote_link, pa.ssh_port)
+        transfer(operations, pa.remote_host, pa.remote_dir, pa.remote_link, pa.ssh_port, pa.rate_limit)
         if not pa.remote_keep is None:
             remotecleandir(operations, pa.remote_host, pa.remote_dir, pa.remote_keep, pa.ssh_port)
 
