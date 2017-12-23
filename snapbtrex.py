@@ -24,8 +24,11 @@
 # * Local syncing of snapshots
 # * Dry run mode
 #
-# TODO: remove shell = True for ssh stuff
-# TODO: change to different time format for integration with smaba vfs https://www.samba.org/samba/docs/man/manpages/vfs_shadow_copy2.8.html
+# 20171223 1.6 (yt)
+# * Error handling
+#
+# IDEA: change to different time format for integration with samba vfs
+#       https://www.samba.org/samba/docs/man/manpages/vfs_shadow_copy2.8.html
 
 """
 snapbtrex is a small utility that keeps snapshots of btrfs filesystems
@@ -136,10 +139,13 @@ to ro snaps in the directory of the snapshots via:
 
 import math
 import time
-import os, os.path, sys, statvfs, itertools
+import os
+import os.path
+import sys
+import statvfs
+import itertools
 
-# DATE_FORMAT='%Y%m%d-%H%M%S' # date format used for directories to clean
-DATE_FORMAT = '%Y%m%d-%H%M%S'
+DATE_FORMAT = '%Y%m%d-%H%M%S'  # date format used for directories to clean
 
 DEFAULT_KEEP_BACKUPS = 10
 
@@ -225,7 +231,7 @@ def _sorted_value(dirs):
     # Keep going as long as there is anything to remove
     while len(candidates) > 1:
         # Get candidates ordered by timestamp (as v is monitonic in timestamp)
-        remain = sorted((v,k) for k,v in candidates.iteritems())
+        remain = sorted((v, k) for k, v in candidates.iteritems())
         # Find the "amount of information we loose by deleting the
         # latest of the pair"
         diffs = list((to_tf - frm_tf, frm, to)
@@ -234,7 +240,7 @@ def _sorted_value(dirs):
         # Select the least important one
         mdiff, mfrm, mto = min(diffs)
 
-        del candidates[mto] # That's not a candidate any longer, it's gonna go
+        del candidates[mto]  # That's not a candidate any longer, it's gonna go
         yield mto
 
     # also, we must delete the last entry
@@ -266,8 +272,8 @@ class Operations:
         if stderr:
             self.trace(LOG_STDERR + stderr)
         if p.returncode != 0:
-            raise Exception("failed %s" % cmd_str)
-        return stdout # return the content
+            raise RuntimeError("failed %s" % cmd_str)
+        return stdout  # return the content
 
     def sync(self, dir):
         # syncing to be sure the operation is on the disc
@@ -328,7 +334,8 @@ class Operations:
         self.check_call(args, shell=True)
 
     def send_withparent(self, parent_snap, snap, receiver, receiver_path, ssh_port, rate_limit):
-        self.trace(LOG_REMOTE + "send snapshot from %s with parent %s to host %s path=%s", snap, parent_snap, receiver, receiver_path)
+        self.trace(LOG_REMOTE + "send snapshot from %s with parent %s to host %s path=%s", snap, parent_snap, receiver,
+                   receiver_path)
         args = ["sudo btrfs send -v -p " +
                 os.path.join(self.path, parent_snap) + " " +
                 os.path.join(self.path, snap) +
@@ -340,7 +347,8 @@ class Operations:
         self.trace(LOG_REMOTE + "finished sending snapshot")
 
     def link_current(self, receiver, receiver_path, snap, link_target, ssh_port):
-        self.trace(LOG_REMOTE + "linking current snapshot host=%s path=%s snap=%s link=%s", receiver, receiver_path, snap, link_target)
+        self.trace(LOG_REMOTE + "linking current snapshot host=%s path=%s snap=%s link=%s", receiver, receiver_path,
+                   snap, link_target)
         args = ["ssh", "-p", ssh_port, receiver,
                 "sudo ln -sfn \'" + os.path.join(receiver_path, snap) + "\' " + link_target]
         self.check_call(args)
@@ -358,7 +366,6 @@ class Operations:
                 os.path.join(self.path, snap) +
                 " | pv -brtf | "
                 "sudo btrfs receive -v " + target]
-        # TODO: breakup the pipe stuff and do it without shell=True, currently it has problems with pipes :(
         self.check_call(args, shell=True)
 
     def sync_withparent(self, parent_snap, snap, target_path):
@@ -518,7 +525,7 @@ def transfer(operations, target_host, target_dir, link_dir, ssh_port, rate_limit
     if len(parents) == 0:
         # start transferring the oldest snapshot
         # by that snapbtrex will transfer all snapshots that have been created
-        operations.send_single( min(localsnaps), target_host, target_dir, ssh_port, rate_limit)
+        operations.send_single(min(localsnaps), target_host, target_dir, ssh_port, rate_limit)
         parents.add(min(localsnaps))
 
     # parent existing, use the latest as parent
@@ -597,11 +604,11 @@ def sync_local(operations, sync_dir):
 def log_trace(fmt, *args, **kwargs):
     tt = time.strftime(DATE_FORMAT, time.gmtime(None)) + ": "
     if args is not None:
-        print  tt + (fmt % args)
+        print tt + (fmt % args)
     elif kwargs is not None:
         print tt + (fmt % kwargs)
     else:
-        print tt + (fmt)
+        print tt + fmt
 
 
 def default_trace(fmt, *args, **kwargs):
@@ -672,7 +679,7 @@ def main(argv):
                 'h': 60*60,
                 'd': 24*60*60,
                 'w': 7*24*60*60,
-                'y': (52*7+1)*24*60*60 } # year = 52 weeks + 1 or 2 days
+                'y': (52*7+1)*24*60*60}  # year = 52 weeks + 1 or 2 days
 
             @staticmethod
             def eval(val, mod):
@@ -690,7 +697,8 @@ def main(argv):
             description='keeps btrfs snapshots for backup, visit https://github.com/yoshtec/snapbtrex for more insight'
             )
 
-        parser.add_argument('--path', '-p',
+        parser.add_argument(
+            '--path', '-p',
             metavar='PATH',
             help='Path for snapshots and cleanup')
 
@@ -698,7 +706,8 @@ def main(argv):
             title='Cleanup',
             description='Try to cleanup until all of the targets are met.')
 
-        target_group.add_argument('--target-freespace', '-F',
+        target_group.add_argument(
+            '--target-freespace', '-F',
             dest='target_freespace',
             metavar='SIZE',
             default=None,
@@ -706,53 +715,62 @@ def main(argv):
             help='Cleanup PATH until at least SIZE is free. SIZE is #bytes, ' +
                  'or given with K, M, G or T respectively for kilo, ...')
 
-        target_group.add_argument('--target-backups', '-B',
+        target_group.add_argument(
+            '--target-backups', '-B',
             dest='target_backups',
             metavar='#',
             type=int,
             help ='Cleanup PATH until at most B backups remain')
 
-        target_group.add_argument('--keep-backups', '-K',
+        target_group.add_argument(
+            '--keep-backups', '-K',
             metavar='N',
             type=int,
             default = DEFAULT_KEEP_BACKUPS,
-            help='keep minimum of N backups')
+            help='Keep minimum of N backups')
 
-        target_group.add_argument('--max-age', '-A',
+        target_group.add_argument(
+            '--max-age', '-A',
             dest='max_age',
             metavar='MAX_AGE',
             default=None,
             type=Age,
-            help='Prefer removal of backups older than MAX_AGE seconds. MAX_AGE is #seconds,' +
-                 ' or given with m (minutes), h (hours), d (days), w (weeks), y (years = 52w + 1d).')
+            help='Prefer removal of backups older than MAX_AGE seconds. MAX_AGE is #seconds, ' +
+                 'or given with m (minutes), h (hours), d (days), w (weeks), y (years = 52w + 1d).')
 
         snap_group = parser.add_mutually_exclusive_group(required=False)
 
-        snap_group.add_argument('--snap', '-s',
+        snap_group.add_argument(
+            '--snap', '-s',
             metavar='SUBVOL',
             default='.',
             help='Take snapshot of SUBVOL on invocation')
 
-        snap_group.add_argument('--no-snap', '-S',
+        snap_group.add_argument(
+            '--no-snap', '-S',
             dest='snap',
             help='Do not take snapshot',
             action='store_const',
             const=None)
 
-        parser.add_argument('--test',
+        parser.add_argument(
+            '--test',
             help='Execute built-in tests',
             action='store_true')
 
-        parser.add_argument('--explain',
+        parser.add_argument(
+            '--explain',
             help='Explain what %(prog)s does (and stop)',
             action='store_true')
 
-        parser.add_argument('--dry-run',
-                            help='do not execute commands, but print commands to stdout what will be done',
-                            dest='dry_run',
-                            action='store_true')
+        parser.add_argument(
+            '--dry-run',
+            help='Do not execute commands, but print shell commands to stdout that would be executed',
+            dest='dry_run',
+            action='store_true')
 
-        parser.add_argument('--verbose', '-v',
+        parser.add_argument(
+            '--verbose', '-v',
             help='Verbose output',
             action='store_true')
 
@@ -760,57 +778,65 @@ def main(argv):
             title='Transfer',
             description='Transfer snapshots to other hosts via ssh. ' +
                         'It is assumed that the user running the script is run can connect to the remote host ' +
-                        'via keys and without passwords. See --explain for more info')
+                        'via keys and without passwords. See --explain or visit the homepage for more info')
 
-        transfer_group.add_argument('--remote-host',
+        transfer_group.add_argument(
+            '--remote-host',
             metavar='HOST',
             dest='remote_host',
             help='Transfer to target host via ssh.')
 
-        transfer_group.add_argument('--remote-dir',
+        transfer_group.add_argument(
+            '--remote-dir',
             metavar='PATH',
             dest='remote_dir',
             help='Transfer the snapshot to this PATH on the target host')
 
-        transfer_group.add_argument('--remote-link',
+        transfer_group.add_argument(
+            '--remote-link',
             metavar='LINK',
             dest='remote_link',
-            help='link the transferred snapshot to this LINK')
+            help='Create a link the transferred snapshot to this LINK')
 
-        transfer_group.add_argument('--remote-keep',
+        transfer_group.add_argument(
+            '--remote-keep',
             metavar='N',
             type=int,
             dest='remote_keep',
             help='Cleanup remote backups until N backups remain, if unset keep all remote transferred backups')
 
-        transfer_group.add_argument('--ssh-port',
+        transfer_group.add_argument(
+            '--ssh-port',
             metavar='SSHPORT',
             dest='ssh_port',
             default='22',
             help='SSH port')
 
-        transfer_group.add_argument('--rate-limit',
+        transfer_group.add_argument(
+            '--rate-limit',
             metavar='RATE',
             dest='rate_limit',
             default='0',
             help='Limit the transfer to a maximum of RATE bytes per ' +
-                   'second. A suffix of "k", "m", "g", or "t" can be added' +
-                   ' to denote kilobytes (*1024), megabytes, and so on.')
+                 'second. A suffix of "k", "m", "g", or "t" can be added ' +
+                 'to denote kilobytes (*1024), megabytes, and so on.')
 
-        sync_group = parser.add_argument_group(title='Sync Local',
-                                               description='Transfer snapshots to another local filesystem.')
+        sync_group = parser.add_argument_group(
+            title='Sync Local',
+            description='Transfer snapshots to another local (btrfs) filesystem.')
 
-        sync_group.add_argument('--sync-target',
-                                metavar='PATH',
-                                dest='sync_dir',
-                                help='Copy snapshot to this path')
+        sync_group.add_argument(
+            '--sync-target',
+            metavar='PATH',
+            dest='sync_dir',
+            help='Copy snapshot to this path')
 
-        sync_group.add_argument('--sync-keep',
-                                metavar='N',
-                                type=int,
-                                dest='remote_keep',
-                                help='Cleanup synced backups until N backups remain, ' +
-                                     'if unset keep all transferred backups')
+        sync_group.add_argument(
+            '--sync-keep',
+            metavar='N',
+            type=int,
+            dest='remote_keep',
+            help='Cleanup synced backups until N backups remain, if unset keep all transferred backups')
 
         pa = parser.parse_args(argv[1:])
         return pa, parser
@@ -867,18 +893,27 @@ def main(argv):
 
     # remote transfer: host and remote dir are needed
     if not (pa.remote_host is None and pa.remote_dir is None):
-        transfer(operations, pa.remote_host, pa.remote_dir, pa.remote_link, pa.ssh_port, pa.rate_limit)
-        if pa.remote_keep is not None:
-            remotecleandir(operations, pa.remote_host, pa.remote_dir, pa.remote_keep, pa.ssh_port)
+        try:
+            transfer(operations, pa.remote_host, pa.remote_dir, pa.remote_link, pa.ssh_port, pa.rate_limit)
+            if pa.remote_keep is not None:
+                remotecleandir(operations, pa.remote_host, pa.remote_dir, pa.remote_keep, pa.ssh_port)
+        except RuntimeError as e:
+            trace(LOG_REMOTE + "Error while transferring to remote host: %s", e)
 
     # Local sync to another path
     if pa.sync_dir is not None:
-        sync_local(operations, pa.sync_dir)
+        try:
+            sync_local(operations, pa.sync_dir)
+        except RuntimeError as e:
+            trace(LOG_LOCAL + "ERROR while Syncing local: %s", e)
 
     if pa.target_freespace is not None or pa.target_backups is not None:
-        if pa.keep_backups == DEFAULT_KEEP_BACKUPS:
-            trace(LOG_LOCAL + "using default value for --keep-backups: %s", DEFAULT_KEEP_BACKUPS)
-        cleandir(operations=operations, targets=pa)
+        try:
+            if pa.keep_backups == DEFAULT_KEEP_BACKUPS:
+                trace(LOG_LOCAL + "using default value for --keep-backups: %s", DEFAULT_KEEP_BACKUPS)
+            cleandir(operations=operations, targets=pa)
+        except RuntimeError as e:
+            trace(LOG_LOCAL + "ERROR while cleaning up: %s", e)
     else:
         trace(LOG_LOCAL + "no options for cleaning were passed -> keeping all snapshots")
 
