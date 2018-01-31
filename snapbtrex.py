@@ -1,4 +1,4 @@
-#!/usr/bin/python2.7
+info.learnmore4a@gmail.com#!/usr/bin/python2.7
 # -*- coding: utf-8 -*-
 #
 # Author: Helge Jensen <hej@actua.dk>
@@ -26,6 +26,12 @@
 #
 # 20171223 1.6 (yt)
 # * Error handling
+#
+# 20180131 1.7 (jcd92)
+# * Save name of last remote-transferred snapshot locally so it does not get
+#   cleaned up when remote host is unavailable. This would make it harder to 
+#   find a good parent for the send operation
+# * Add check to see if remote host is accessible otherwise skip transfer
 #
 # IDEA: change to different time format for integration with samba vfs
 #       https://www.samba.org/samba/docs/man/manpages/vfs_shadow_copy2.8.html
@@ -446,6 +452,12 @@ def cleandir(operations, targets):
     while True:
         do_del = None
         dirs = sorted(operations.listdir())
+        # Read the name of the last snapshot transferred to the remote server, and keep it from 
+        # being cleaned out
+        f = open(operations.path + "/last_transfer.txt","r")
+        last_transfer = f.read()
+        dirs.remove(last_transfer)
+
         dirs_len = len(dirs)
         if dirs_len <= 0:
             raise Exception("No more directories to clean")
@@ -542,6 +554,12 @@ def transfer(operations, target_host, target_dir, link_dir, ssh_port, rate_limit
                 operations.link_current(target_host, target_dir, s, link_dir, ssh_port)
             # advance one step
             parent = s
+            
+    # Save the name of the last snapshot transferred to the remote server so it can
+    # be removed from the list to be cleaned until the next remote transfer
+    f = open(operations.path + "/last_transfer.txt", "w+")
+    f.write(s)    
+    f.close()
 
 
 def remotecleandir(operations, target_host, target_dir, remote_keep, ssh_port):
@@ -893,12 +911,17 @@ def main(argv):
 
     # remote transfer: host and remote dir are needed
     if not (pa.remote_host is None and pa.remote_dir is None):
-        try:
-            transfer(operations, pa.remote_host, pa.remote_dir, pa.remote_link, pa.ssh_port, pa.rate_limit)
-            if pa.remote_keep is not None:
+        # Test with ping to see if remote host is accessible, otherwise skip transfer
+        if not (os.system("ping -c 1 " + pa.remote_host)):
+            try:
+                transfer(operations, pa.remote_host, pa.remote_dir, pa.remote_link, pa.ssh_port, pa.rate_limit)
+                if pa.remote_keep is not None:
                 remotecleandir(operations, pa.remote_host, pa.remote_dir, pa.remote_keep, pa.ssh_port)
-        except RuntimeError as e:
-            trace(LOG_REMOTE + "Error while transferring to remote host: %s", e)
+            except RuntimeError as e:
+                trace(LOG_REMOTE + "Error while transferring to remote host: %s", e)
+                
+        else:
+            trace(LOG_REMOTE + "Host is not accessible: skipping transfer operations")
 
     # Local sync to another path
     if pa.sync_dir is not None:
