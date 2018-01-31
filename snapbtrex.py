@@ -1,4 +1,4 @@
-info.learnmore4a@gmail.com#!/usr/bin/python2.7
+#!/usr/bin/python2.7
 # -*- coding: utf-8 -*-
 #
 # Author: Helge Jensen <hej@actua.dk>
@@ -916,7 +916,7 @@ def main(argv):
             try:
                 transfer(operations, pa.remote_host, pa.remote_dir, pa.remote_link, pa.ssh_port, pa.rate_limit)
                 if pa.remote_keep is not None:
-                remotecleandir(operations, pa.remote_host, pa.remote_dir, pa.remote_keep, pa.ssh_port)
+                    remotecleandir(operations, pa.remote_host, pa.remote_dir, pa.remote_keep, pa.ssh_port)
             except RuntimeError as e:
                 trace(LOG_REMOTE + "Error while transferring to remote host: %s", e)
                 
