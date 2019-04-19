@@ -27,8 +27,12 @@
 # 20171223 1.6 (yt)
 # * Error handling
 #
+# 20180419 1.7 (yt)
+# * Added --keep-only-latest modifier
+# * --dry-run should not exit on deletion anymore
+#
 # IDEA: change to different time format for integration with samba vfs
-#       https://www.samba.org/samba/docs/man/manpages/vfs_shadow_copy2.8.html
+# https://www.samba.org/samba/docs/man/manpages/vfs_shadow_copy2.8.html
 
 """
 snapbtrex is a small utility that keeps snapshots of btrfs filesystems
@@ -64,7 +68,6 @@ while older pairs will have high value if they are far apart.
 
 The mechanism is completely self-contained and you can delete any
 snapshot manually or any files in the snapshots.
-
 
 
 == Transferring Snapshots to Remote Host
@@ -134,7 +137,6 @@ to ro snaps in the directory of the snapshots via:
 
   sudo find . -maxdepth 1 -type d -exec btrfs property set -t s {} ro true \;
 
-
 """
 
 import math
@@ -151,7 +153,7 @@ DEFAULT_KEEP_BACKUPS = 10
 
 LOG_LOCAL =  "Local  > "
 LOG_REMOTE = "Remote > "
-LOG_EXEC =   "EXEC   > "
+LOG_EXEC =   "EXEC  >-> "
 LOG_STDERR = "STDERR > "
 LOG_OUTPUT = "OUTPUT > "
 
@@ -378,12 +380,25 @@ class Operations:
                 ]
         self.check_call(args, shell=True)
 
-
+# Allows to Simulate operations
 class DryOperations(Operations):
-    def check_call(self, args, shell=False):
+    def __init__(self, path, trace=None):
+        Operations.__init__(self, path=path, trace=trace)
+        self.dirs = None
+
+    def check_call(self, args, dirs=None, shell=False):
         cmd_str = " ".join(args)
         self.trace(LOG_EXEC + cmd_str)
+        
+    # added to simulate also the deletion of snapshots
+    def listdir(self):
+        if self.dirs is None:
+            self.dirs = [d for d in os.listdir(self.path) if timef(d)]
+        return self.dirs
 
+    def unsnap(self, dir):
+        Operations.unsnap(self, dir)
+        self.dirs.remove(dir)
 
 class FakeOperations(DryOperations):
     def __init__(self,
@@ -433,9 +448,11 @@ class FakeOperations(DryOperations):
 
 
 def cleandir(operations, targets):
-    # Perform actual cleanup using 'operations' until 'targets' are met
+    """ Perform actual cleanup of using 'operations' until 'targets' are met """
+    
     trace = operations.trace
     keep_backups = targets.keep_backups
+    keep_latest = targets.keep_latest
     target_fsp = targets.target_freespace
     target_backups = targets.target_backups
     max_age = targets.max_age
@@ -443,19 +460,20 @@ def cleandir(operations, targets):
     was_above_target_backups = None
     last_dirs = []
 
+    trace(LOG_LOCAL + "Parameters for cleandir: keep_backups=%s, target_freespace=%s, target_backups=%s, max_age=%s, keep_latest=%s ", keep_backups, target_fsp, target_backups, max_age, keep_latest)
+
     while True:
         do_del = None
         dirs = sorted(operations.listdir())
         dirs_len = len(dirs)
         if dirs_len <= 0:
             raise Exception("No more directories to clean")
-            break
         elif sorted(dirs) == last_dirs:
-            raise Exception("No directories removed")
-            break
+            raise Exception("Could not delete last snapshot: %s")
         else:
             last_dirs = dirs
 
+        # check at least keep this amount of backups
         if keep_backups is not None:
             if dirs_len <= keep_backups:
                 trace(LOG_LOCAL + "Reached number of backups to keep: %s ", dirs_len)
@@ -493,12 +511,15 @@ def cleandir(operations, targets):
             break
 
         next_del = None
-        if max_age is not None:
+        if max_age is not None: 
             next_del = first(sorted_age(dirs, max_age))
+        # remove latest first only if the keep_latest is 'True'
+        if keep_latest is not None and keep_latest:
+            next_del = first(dirs)
         if next_del is None:
             next_del = first(sorted_value(dirs))
         else:
-            trace(LOG_LOCAL + "found backup older than: '%s'", operations.datestamp(max_age))
+            trace(LOG_LOCAL + "will delete backup: '%s'", operations.datestamp(max_age))
         if next_del is None:
             trace(LOG_LOCAL + "No more backups left")
             break
@@ -507,7 +528,7 @@ def cleandir(operations, targets):
 
 
 def transfer(operations, target_host, target_dir, link_dir, ssh_port, rate_limit):
-    # Transfer snapshots to remote host
+    """ Transfer snapshots to remote host """
 
     trace = operations.trace
 
@@ -545,7 +566,7 @@ def transfer(operations, target_host, target_dir, link_dir, ssh_port, rate_limit
 
 
 def remotecleandir(operations, target_host, target_dir, remote_keep, ssh_port):
-    # Perform remote cleanup using 'operations' until exactly remote_keep backups are left
+    """ Perform remote cleanup using 'operations' until exactly remote_keep backups are left """
     trace = operations.trace
 
     if remote_keep is not None:
@@ -566,7 +587,7 @@ def remotecleandir(operations, target_host, target_dir, remote_keep, ssh_port):
 
 
 def sync_local(operations, sync_dir):
-    # Transfer snapshots to local target
+    """ Transfer snapshots to local target """
     trace = operations.trace
 
     # find out what kind of snapshots exist on the remote host
@@ -694,17 +715,17 @@ def main(argv):
                 return float(now - age)
 
         parser = argparse.ArgumentParser(
-            description='keeps btrfs snapshots for backup, visit https://github.com/yoshtec/snapbtrex for more insight'
-            )
+            description='keeps btrfs snapshots for backup, visit https://github.com/yoshtec/snapbtrex for more insight')
 
         parser.add_argument(
             '--path', '-p',
             metavar='PATH',
-            help='Path for snapshots and cleanup')
+            required=True,
+            help='Target path for new snapshots and cleanup operations')
 
         target_group = parser.add_argument_group(
             title='Cleanup',
-            description='Try to cleanup until all of the targets are met.')
+            description='Delete backup snapshots until the targets are met')
 
         target_group.add_argument(
             '--target-freespace', '-F',
@@ -727,7 +748,7 @@ def main(argv):
             metavar='N',
             type=int,
             default = DEFAULT_KEEP_BACKUPS,
-            help='Keep minimum of N backups')
+            help='Keep minimum of N backups -> This is a lower bound')
 
         target_group.add_argument(
             '--max-age', '-A',
@@ -737,6 +758,12 @@ def main(argv):
             type=Age,
             help='Prefer removal of backups older than MAX_AGE seconds. MAX_AGE is #seconds, ' +
                  'or given with m (minutes), h (hours), d (days), w (weeks), y (years = 52w + 1d).')
+        
+        target_group.add_argument(
+             '--keep-only-latest', '-L',
+             dest='keep_latest',
+             action='store_true',
+             help='lets you keep only the latest snapshots')
 
         snap_group = parser.add_mutually_exclusive_group(required=False)
 
@@ -843,7 +870,7 @@ def main(argv):
 
     pa, parser = args()
 
-    # safety net if no arguments are given call for help
+    # safety net if no arguments are given call for help    
     if len(sys.argv[1:]) == 0:
         parser.print_help()
         return 0

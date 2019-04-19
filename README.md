@@ -31,6 +31,7 @@ The scoring mechanism integrates e^x from (now-newer) to (now-older)
 so, new pairs will have high value, even if they are tightly packed,
 while older pairs will have high value if they are far apart.
 
+Alternatively you can also keep only the latest snapshots via `--keep-only-latest` or set a maximum age for your snapshots with the `--max-age` parameter.
 
 ## Transferring Snapshots to Remote Host
 
