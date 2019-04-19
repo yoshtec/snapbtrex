@@ -386,7 +386,7 @@ class DryOperations(Operations):
         Operations.__init__(self, path=path, trace=trace)
         self.dirs = None
 
-    def check_call(self, args, dirs=None, shell=False):
+    def check_call(self, args, shell=False):
         cmd_str = " ".join(args)
         self.trace(LOG_EXEC + cmd_str)
         
@@ -399,6 +399,7 @@ class DryOperations(Operations):
     def unsnap(self, dir):
         Operations.unsnap(self, dir)
         self.dirs.remove(dir)
+        
 
 class FakeOperations(DryOperations):
     def __init__(self,
