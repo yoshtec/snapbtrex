@@ -103,7 +103,7 @@ Hint 1: For a more secure setup you should include the specific paths at the
 sudoers files.
 
 Hint 2: On some Linux flavors you might find the btrfs tools in `/sbin/btrfs`
-opposed to `/bin/btrfs`, the sudoers files have to reflect that.
+opposed to `/bin/btrfs`, the sudoers files have to reflect that. Try using `which btrfs` to find out the full path to your `btrfs`.
 
 
 ## Migrating from SnapBtr
