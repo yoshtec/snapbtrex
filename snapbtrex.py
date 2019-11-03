@@ -259,7 +259,7 @@ class Operations:
         self.tracef = trace
         self.path = path
 
-    def check_call(self, args, shell=False):
+    def check_call(self, args, shell=False, dry_safe=False):
         cmd_str = " ".join(args)
         self.trace(LOG_EXEC + cmd_str)
         import subprocess
@@ -303,7 +303,7 @@ class Operations:
     def listremote_dir(self, receiver, receiver_path, ssh_port):
         self.trace(LOG_REMOTE + "list remote files host=%s, dir=%s", receiver, receiver_path)
         args = ["ssh", "-p", ssh_port, receiver, "ls -1 " + receiver_path]
-        return [d for d in self.check_call(args).splitlines() if timef(d)]
+        return [d for d in self.check_call(args, dry_safe=True).splitlines() if timef(d)]
 
     def snap(self, path):
         # yt: changed to readonly snapshots
@@ -386,9 +386,14 @@ class DryOperations(Operations):
         Operations.__init__(self, path=path, trace=trace)
         self.dirs = None
 
-    def check_call(self, args, shell=False):
+    def check_call(self, args, shell=False, dry_safe=False):
         cmd_str = " ".join(args)
-        self.trace(LOG_EXEC + cmd_str)
+        if dry_safe:
+            self.trace(LOG_EXEC + "executing dry-safe command: " + cmd_str)
+            return Operations.check_call(self, args, shell, dry_safe)
+        else:
+            self.trace(LOG_EXEC + cmd_str)
+
         
     # added to simulate also the deletion of snapshots
     def listdir(self):
@@ -910,7 +915,7 @@ def main(argv):
             space=5)
     elif pa.dry_run:
         trace(" ## DRY RUN ##")
-        trace(" ## DRY RUN ## Dry Run mode: all operations are only displayed without execution")
+        trace(" ## DRY RUN ## Dry Run mode: disk-modifying operations are only displayed without execution")
         trace(" ## DRY RUN ##")
         operations = DryOperations(path=pa.path, trace=trace)
     else:
