@@ -31,6 +31,10 @@
 # * Added --keep-only-latest modifier
 # * --dry-run should not exit on deletion anymore
 #
+# 20191124 1.8 (yt)
+# * fixed --sync-keep
+#
+#
 # IDEA: change to different time format for integration with samba vfs
 # https://www.samba.org/samba/docs/man/manpages/vfs_shadow_copy2.8.html
 
@@ -59,7 +63,7 @@ you go back in time. It does this by selecting snapshots to remove as
 follows.
 
 The snapshots to remove is selected by "scoring" each space between
-snapshots, (newer,older). snapbtr will remove the older of the two
+snapshots, (newer,older). snapbtrex will remove the older of the two
 snapshots in the space that have the lowest score.
 
 The scoring mechanism integrates e^x from (now-newer) to (now-older)
@@ -120,7 +124,7 @@ If you need remote pruning then add this (you can also add the path for more sec
 
 File: /etc/sudoers.d/90_snapbtrsnd
 
-Precaution: depending on your distrubution the path for btrfs tools might differ!
+Precaution: depending on your distribution the path for btrfs tools might differ!
 
 Contents:
 --
@@ -131,7 +135,7 @@ Contents:
 
 == Precautions
 if you created your snapshots with an old version of snapbtr than those
-snapshots had been created as read/write snapshots. The sending of snapshots
+snapshots have been created as read/write snapshots. The sending of snapshots
 to remote hosts demands that those snaps are readonly. You can change rw snaps
 to ro snaps in the directory of the snapshots via:
 
@@ -285,9 +289,11 @@ class Operations:
         self.trace(LOG_LOCAL + "done sync filesystem '%s'", dir)
 
     def unsnap(self, dir):
+        self.unsnapx(os.path.join(self.path, dir))
+
+    def unsnapx(self, dir):
         self.trace(LOG_LOCAL + "remove snapshot '%s'", dir)
-        args = ["sudo", "btrfs", "subvolume", "delete",
-                os.path.join(self.path, dir)]
+        args = ["sudo", "btrfs", "subvolume", "delete", dir]
         self.check_call(args)
         self.trace(LOG_LOCAL + "done remove snapshot '%s'", dir)
 
@@ -394,7 +400,6 @@ class DryOperations(Operations):
         else:
             self.trace(LOG_EXEC + cmd_str)
 
-        
     # added to simulate also the deletion of snapshots
     def listdir(self):
         if self.dirs is None:
@@ -438,7 +443,7 @@ class FakeOperations(DryOperations):
         self.trace("listdir() = %s", self.dirs.keys())
         return self.dirs.iterkeys()
 
-    def listdir_path(self, dir):
+    def listdir_path(self, target_path):
         dirs = ['20101201-030000', '20101201-040000', '20101201-050000' ]
         self.trace("listdir_path() values=%s", dirs)
         return dirs
@@ -466,7 +471,8 @@ def cleandir(operations, targets):
     was_above_target_backups = None
     last_dirs = []
 
-    trace(LOG_LOCAL + "Parameters for cleandir: keep_backups=%s, target_freespace=%s, target_backups=%s, max_age=%s, keep_latest=%s ", keep_backups, target_fsp, target_backups, max_age, keep_latest)
+    trace(LOG_LOCAL + "Parameters for cleandir: keep_backups=%s, target_freespace=%s, target_backups=%s, max_age=%s," +
+                      " keep_latest=%s ", keep_backups, target_fsp, target_backups, max_age, keep_latest)
 
     while True:
         do_del = None
@@ -626,6 +632,28 @@ def sync_local(operations, sync_dir):
             # if link_dir is not None:
             #    operations.link_current(target_host, target_dir, s, link_dir, ssh_port)
             parent = s
+
+
+def sync_cleandir(operations, target_dir, sync_keep):
+    """ Perform local sync cleanup using 'operations' until exactly sync_keep backups are left """
+    trace = operations.trace
+
+    if sync_keep is not None:
+        dirs = sorted(operations.listdir_path(target_dir))
+        dirs_len = len(dirs)
+        if dirs_len <= sync_keep or sync_keep <= 0:
+            trace(LOG_LOCAL + "No synced directories to clean, currently %s synced backups, should keep %s", dirs_len, sync_keep)
+        else:
+            delete_dirs = sorted_value(dirs)
+            del_count = dirs_len - sync_keep
+            trace(LOG_LOCAL + "about to remove sync %s of out of %s synced backups, keeping %s", del_count, dirs_len, sync_keep)
+            for del_dir in itertools.islice(delete_dirs, del_count):
+                trace(LOG_LOCAL + "removing: ")
+                if del_dir is None:
+                    trace(LOG_LOCAL + "No more synced backups left")
+                    break
+                else:
+                    operations.unsnapx(os.path.join(target_dir, del_dir))
 
 
 def log_trace(fmt, *args, **kwargs):
@@ -868,8 +896,8 @@ def main(argv):
             '--sync-keep',
             metavar='N',
             type=int,
-            dest='remote_keep',
-            help='Cleanup synced backups until N backups remain, if unset keep all transferred backups')
+            dest='sync_keep',
+            help='Cleanup local synced backups until N backups remain, if unset keep all locally synced backups')
 
         pa = parser.parse_args(argv[1:])
         return pa, parser
@@ -937,9 +965,12 @@ def main(argv):
     if pa.sync_dir is not None:
         try:
             sync_local(operations, pa.sync_dir)
+            if pa.sync_keep is not None:
+                sync_cleandir(operations, pa.sync_dir, pa.sync_keep)
         except RuntimeError as e:
             trace(LOG_LOCAL + "ERROR while Syncing local: %s", e)
 
+    # cleanup local
     if pa.target_freespace is not None or pa.target_backups is not None:
         try:
             if pa.keep_backups == DEFAULT_KEEP_BACKUPS:
