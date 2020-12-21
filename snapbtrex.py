@@ -1,4 +1,4 @@
-#!/usr/bin/python2.7
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
 # Author: Helge Jensen <hej@actua.dk>
@@ -139,7 +139,7 @@ snapshots have been created as read/write snapshots. The sending of snapshots
 to remote hosts demands that those snaps are readonly. You can change rw snaps
 to ro snaps in the directory of the snapshots via:
 
-  sudo find . -maxdepth 1 -type d -exec btrfs property set -t s {} ro true \;
+  sudo find . -maxdepth 1 -type d -exec btrfs property set -t s {} ro true \\;
 
 """
 
@@ -148,29 +148,26 @@ import time
 import os
 import os.path
 import sys
-import statvfs
 import itertools
 
 DATE_FORMAT = '%Y%m%d-%H%M%S'  # date format used for directories to clean
 
 DEFAULT_KEEP_BACKUPS = 10
 
-LOG_LOCAL =  "Local  > "
+LOG_LOCAL = "Local  > "
 LOG_REMOTE = "Remote > "
-LOG_EXEC =   "EXEC  >-> "
+LOG_EXEC = "EXEC  >-> "
 LOG_STDERR = "STDERR > "
 LOG_OUTPUT = "OUTPUT > "
 
 # find TIME_SCALE: t < 2**32 => e**(t/c) < 2**32
-TIME_SCALE = math.ceil(float((2**32)/math.log(2**32)))
+TIME_SCALE = math.ceil(float((2**32) / math.log(2**32)))
 
 
 def timef(x):
     # make value inverse exponential in the time passed
     try:
-        v = math.exp(
-            _timestamp(x)
-            /TIME_SCALE)
+        v = math.exp(_timestamp(x) / TIME_SCALE)
     except:
         v = None
     return v
@@ -214,15 +211,15 @@ def _sorted_value(dirs):
     def poles(items):
         # Yield (items[0], items[1]), (items[1], items[2]), ... (items[n-1], items[n])
         rest = iter(items)
-        last = rest.next()
-        for next in rest:
-            yield (last, next)
-            last = next
+        last = next(rest)
+        for n in rest:
+            yield last, n
+            last = n
 
     def all_but_last(items):
         # Yield items[0], ..., items[n-1]
         rest = iter(items)
-        last = rest.next()
+        last = next(rest)
         for x in rest:
             yield last
             last = x
@@ -236,13 +233,14 @@ def _sorted_value(dirs):
                      if xf))
     # Keep going as long as there is anything to remove
     while len(candidates) > 1:
-        # Get candidates ordered by timestamp (as v is monitonic in timestamp)
-        remain = sorted((v, k) for k, v in candidates.iteritems())
+        # Get candidates ordered by timestamp (as v is monotonic in timestamp)
+        remain = sorted((v, k) for k, v in candidates.items())
         # Find the "amount of information we loose by deleting the
         # latest of the pair"
-        diffs = list((to_tf - frm_tf, frm, to)
-                               for ((frm_tf, frm), (to_tf, to))
-                               in poles(remain))
+        diffs = list(
+            (to_tf - frm_tf, frm, to)
+            for ((frm_tf, frm), (to_tf, to))
+            in poles(remain))
         # Select the least important one
         mdiff, mfrm, mto = min(diffs)
 
@@ -250,12 +248,12 @@ def _sorted_value(dirs):
         yield mto
 
     # also, we must delete the last entry
-    yield candidates.iterkeys().next()
+    yield next(iter(candidates.keys()))
 
 
 def freespace(path):
     st = os.statvfs(path)
-    return st[statvfs.F_BFREE] * st[statvfs.F_FRSIZE]
+    return st.f_bfree * st.f_frsize
 
 
 class Operations:
@@ -274,9 +272,9 @@ class Operations:
             shell=shell)
         stdout, stderr = p.communicate()
         if stdout:
-            self.trace(LOG_OUTPUT + stdout)
+            self.trace(LOG_OUTPUT + stdout.decode("utf-8"))
         if stderr:
-            self.trace(LOG_STDERR + stderr)
+            self.trace(LOG_STDERR + stderr.decode("utf-8"))
         if p.returncode != 0:
             raise RuntimeError("failed %s" % cmd_str)
         return stdout  # return the content
@@ -386,6 +384,7 @@ class Operations:
                 ]
         self.check_call(args, shell=True)
 
+
 # Allows to Simulate operations
 class DryOperations(Operations):
     def __init__(self, path, trace=None):
@@ -444,7 +443,7 @@ class FakeOperations(DryOperations):
         return self.dirs.iterkeys()
 
     def listdir_path(self, target_path):
-        dirs = ['20101201-030000', '20101201-040000', '20101201-050000' ]
+        dirs = ['20101201-030000', '20101201-040000', '20101201-050000']
         self.trace("listdir_path() values=%s", dirs)
         return dirs
 
@@ -585,7 +584,8 @@ def remotecleandir(operations, target_host, target_dir, remote_keep, ssh_port):
         dirs = sorted(operations.listremote_dir(receiver=target_host, receiver_path=target_dir, ssh_port=ssh_port))
         dirs_len = len(dirs)
         if dirs_len <= remote_keep or remote_keep <= 0:
-            trace(LOG_REMOTE + "No remote directories to clean, currently %s remote backups, should keep %s", dirs_len, remote_keep)
+            trace(LOG_REMOTE + "No remote directories to clean, currently %s remote backups, should keep %s",
+                  dirs_len, remote_keep)
         else:
             delete_dirs = sorted_value(dirs)
             del_count = dirs_len - remote_keep
@@ -642,11 +642,13 @@ def sync_cleandir(operations, target_dir, sync_keep):
         dirs = sorted(operations.listdir_path(target_dir))
         dirs_len = len(dirs)
         if dirs_len <= sync_keep or sync_keep <= 0:
-            trace(LOG_LOCAL + "No synced directories to clean, currently %s synced backups, should keep %s", dirs_len, sync_keep)
+            trace(LOG_LOCAL + "No synced directories to clean, currently %s synced backups, should keep %s",
+                  dirs_len, sync_keep)
         else:
             delete_dirs = sorted_value(dirs)
             del_count = dirs_len - sync_keep
-            trace(LOG_LOCAL + "about to remove sync %s of out of %s synced backups, keeping %s", del_count, dirs_len, sync_keep)
+            trace(LOG_LOCAL + "about to remove sync %s of out of %s synced backups, keeping %s",
+                  del_count, dirs_len, sync_keep)
             for del_dir in itertools.islice(delete_dirs, del_count):
                 trace(LOG_LOCAL + "removing: ")
                 if del_dir is None:
@@ -659,20 +661,20 @@ def sync_cleandir(operations, target_dir, sync_keep):
 def log_trace(fmt, *args, **kwargs):
     tt = time.strftime(DATE_FORMAT, time.gmtime(None)) + ": "
     if args is not None:
-        print tt + (fmt % args)
+        print(tt + (fmt % args))
     elif kwargs is not None:
-        print tt + (fmt % kwargs)
+        print(tt + (fmt % kwargs))
     else:
-        print tt + fmt
+        print(tt + fmt)
 
 
 def default_trace(fmt, *args, **kwargs):
     if args is not None:
-        print fmt % args
+        print(fmt % args)
     elif kwargs is not None:
-        print fmt % kwargs
+        print(fmt % kwargs)
     else:
-        print fmt
+        print(fmt)
 
 
 def null_trace(fmt, *args, **kwargs):
@@ -700,10 +702,11 @@ def main(argv):
                 return True
 
             def __init__(self, value):
+                super().__init__(value)
                 self.origin = value
 
             def __new__(cls, value=0):
-                if isinstance(value, (str, unicode)):
+                if isinstance(value, str):
                     value = UnitInt.parse(cls, value)
                 return super(UnitInt, cls).__new__(cls, value)
 
@@ -775,13 +778,13 @@ def main(argv):
             dest='target_backups',
             metavar='#',
             type=int,
-            help ='Cleanup PATH until at most B backups remain')
+            help='Cleanup PATH until at most B backups remain')
 
         target_group.add_argument(
             '--keep-backups', '-K',
             metavar='N',
             type=int,
-            default = DEFAULT_KEEP_BACKUPS,
+            default=DEFAULT_KEEP_BACKUPS,
             help='Keep minimum of N backups -> This is a lower bound')
 
         target_group.add_argument(

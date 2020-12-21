@@ -2,8 +2,11 @@
 
 LIMG="local.test.img"
 LMNT="btrfs.test.local"
+RESULT=0
 
 test_error() {
+  # Increase Error count
+  RESULT+=1
   # see here: https://misc.flogisoft.com/bash/tip_colors_and_formatting
   echo -e "\e[1m\e[41mERROR: \e[0m $3, Result: $1, Expected: $2"
 }
@@ -51,6 +54,7 @@ test_local_sync(){
     ./snapbtrex.py --path "./$LMNT/.snapshot/" --snap "./$LMNT/path/"  --target-backups 10 --verbose --sync-target "./$LMNT/.sync/" --sync-keep 5
     sleep 1
   done
+
   # should be 10 dirs in .snapshot
   X=$(find ./$LMNT/.snapshot/* -maxdepth 0 -type d | wc -l)
   test_equal "$X" 10 "Keep Snapshot "
@@ -60,10 +64,30 @@ test_local_sync(){
   test_equal "$Y" 5 "Sync keep"
 }
 
+test_local_latest(){
+  for i in {1..20}
+  do
+    ./snapbtrex.py --path "./$LMNT/.snapshot/" --snap "./$LMNT/path/"  --target-backups 10 --keep-only-latest
+    sleep 1
+  done
+
+  # should be 10 dirs in .snapshot
+  X=$(find ./$LMNT/.s napshot/* -maxdepth 0 -type d | wc -l)
+  test_equal "$X" 10 "Keep Snapshot "
+
+}
+
+
+# Main
 setup
-
 test_local_sync
-
 cleanup
 
+setup
+test_local_latest
+cleanup
+
+
+
+exit $RESULT
 
