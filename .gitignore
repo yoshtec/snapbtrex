@@ -1,2 +1,5 @@
 venv
 .idea
+
+btrfs.test.local
+local.test.img

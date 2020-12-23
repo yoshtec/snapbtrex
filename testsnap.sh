@@ -2,6 +2,9 @@
 
 LIMG="local.test.img"
 LMNT="btrfs.test.local"
+SUBVOLUME="./$LMNT/subvolume"
+SNAPSHOT="./$LMNT/.snapshot"
+
 RESULT=0
 
 test_error() {
@@ -24,7 +27,7 @@ test_equal() {
   fi
 }
 
-setup() {
+setup_btrfs() {
   truncate -s 140M $LIMG
 
   mkfs.btrfs $LIMG
@@ -33,15 +36,15 @@ setup() {
 
   mount -o loop $LIMG $LMNT
 
-  btrfs subvolume create $LMNT/path
-  mkdir $LMNT/.snapshot
+  btrfs subvolume create "$SUBVOLUME"
+  mkdir "$SNAPSHOT"
   mkdir $LMNT/.sync
 
-  touch $LMNT/path/file.file
+  touch "$SUBVOLUME/file.file"
+  head -c 1M </dev/urandom >"$SUBVOLUME/randomfile.file"
 }
 
-cleanup (){
-
+cleanup_btrfs (){
   umount $LMNT
   rmdir $LMNT
   rm $LIMG
@@ -51,12 +54,12 @@ cleanup (){
 test_local_sync(){
   for i in {1..20}
   do
-    ./snapbtrex.py --path "./$LMNT/.snapshot/" --snap "./$LMNT/path/"  --target-backups 10 --verbose --sync-target "./$LMNT/.sync/" --sync-keep 5
+    ./snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --target-backups 10 --verbose --sync-target "./$LMNT/.sync/" --sync-keep 5
     sleep 1
   done
 
   # should be 10 dirs in .snapshot
-  X=$(find ./$LMNT/.snapshot/* -maxdepth 0 -type d | wc -l)
+  X=$(find $SNAPSHOT/* -maxdepth 0 -type d | wc -l)
   test_equal "$X" 10 "Keep Snapshot "
 
   # and 5 dirs in sync
@@ -65,20 +68,41 @@ test_local_sync(){
 }
 
 test_local_latest(){
-  for i in {1..20}
+  for i in {1..5}
   do
-    ./snapbtrex.py --path "./$LMNT/.snapshot/" --snap "./$LMNT/path/"  --target-backups 10 --keep-only-latest
+    ./snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --target-backups 10 --keep-only-latest --verbose
+    sleep 1
+  done
+
+  FIRST=$(find "$SNAPSHOT/*" -maxdepth 0 -type d | sort)
+
+  for i in {1..10}
+  do
+    ./snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --target-backups 10 --keep-only-latest --verbose
     sleep 1
   done
 
   # should be 10 dirs in .snapshot
-  X=$(find ./$LMNT/.s napshot/* -maxdepth 0 -type d | wc -l)
+  LAST=$(find $SNAPSHOT/* -maxdepth 0 -type d | sort)
+  intersection_set=$(echo "${FIRST[@]}" "${LAST[@]}" | sed 's/ /\n/g' | sort | uniq -d)
+  echo "$intersection_set"
+
+  X=$(find $SNAPSHOT/* -maxdepth 0 -type d | wc -l)
   test_equal "$X" 10 "Keep Snapshot "
 
 }
 
-
+####
 # Main
+####
+
+# exit with error if not run as root
+if [[ $(id -u) -ne 0 ]] ; then
+  test_error "$(id -u)" 0 "running as root"
+  echo "testing needs privileged access to btrfs filesystem actions. please run as root"
+  exit $RESULT
+fi
+
 setup
 test_local_sync
 cleanup
@@ -86,8 +110,6 @@ cleanup
 setup
 test_local_latest
 cleanup
-
-
 
 exit $RESULT
 
