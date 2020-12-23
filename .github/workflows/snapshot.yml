@@ -17,5 +17,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Install pv dependency
+        run: sudo apt-get install pv
+
       - name: Run snapshot test
         run: sudo ./testsnap.sh
