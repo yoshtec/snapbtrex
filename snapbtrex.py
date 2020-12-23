@@ -143,12 +143,12 @@ to ro snaps in the directory of the snapshots via:
 
 """
 
+import itertools
 import math
-import time
 import os
 import os.path
 import sys
-import itertools
+import time
 
 DATE_FORMAT = '%Y%m%d-%H%M%S'  # date format used for directories to clean
 
@@ -168,7 +168,7 @@ def timef(x):
     # make value inverse exponential in the time passed
     try:
         v = math.exp(_timestamp(x) / TIME_SCALE)
-    except:
+    except ZeroDivisionError:
         v = None
     return v
 
@@ -176,7 +176,7 @@ def timef(x):
 def timestamp(x):
     try:
         v = _timestamp(x)
-    except:
+    except ZeroDivisionError:
         v = None
     return v
 
@@ -408,7 +408,7 @@ class DryOperations(Operations):
     def unsnap(self, dir):
         Operations.unsnap(self, dir)
         self.dirs.remove(dir)
-        
+
 
 class FakeOperations(DryOperations):
     def __init__(self,
@@ -522,7 +522,7 @@ def cleandir(operations, targets):
             break
 
         next_del = None
-        if max_age is not None: 
+        if max_age is not None:
             next_del = first(sorted_age(dirs, max_age))
         # remove latest first only if the keep_latest is 'True'
         if keep_latest is not None and keep_latest:

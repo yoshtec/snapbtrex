@@ -95,7 +95,7 @@ test_local_latest(){
   echo "$LAST"
 
   count=$(echo "${FIRST[@]}" "${LAST[@]}" | sed 's/ /\n/g' | sort | uniq -d | wc -l)
-  test_equal $count 0 "keep latest"
+  test_equal "$count" 0 "keep latest"
 }
 
 ####
