@@ -55,6 +55,7 @@ cleanup_btrfs (){
 test_local_sync(){
   for i in {1..20}
   do
+    echo "RUN: $i"
     ./snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --target-backups 10 --verbose --sync-target "./$LMNT/.sync/" --sync-keep 5
     sleep 1
   done
@@ -71,6 +72,7 @@ test_local_sync(){
 test_local_latest(){
   for i in {1..5}
   do
+    echo "RUN: $i"
     ./snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --target-backups 10 --keep-only-latest --verbose
     sleep 1
   done
@@ -82,6 +84,7 @@ test_local_latest(){
 
   for i in {1..10}
   do
+    echo "RUN: $i"
     ./snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --target-backups 10 --keep-only-latest --verbose
     sleep 1
   done
