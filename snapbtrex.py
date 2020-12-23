@@ -755,7 +755,7 @@ def main(argv):
             description='keeps btrfs snapshots for backup, visit https://github.com/yoshtec/snapbtrex for more insight')
 
         parser.add_argument(
-            '--path', '-p',
+            '--path', '-p', '--snap-to',
             metavar='PATH',
             required=True,
             help='Target path for new snapshots and cleanup operations')
@@ -805,7 +805,7 @@ def main(argv):
         snap_group = parser.add_mutually_exclusive_group(required=False)
 
         snap_group.add_argument(
-            '--snap', '-s',
+            '--snap', '-s', '--snap-this',
             metavar='SUBVOL',
             default='.',
             help='Take snapshot of SUBVOL on invocation')

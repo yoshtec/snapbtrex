@@ -75,7 +75,10 @@ test_local_latest(){
     sleep 1
   done
 
-  FIRST=$(find "$SNAPSHOT/*" -maxdepth 0 -type d | sort)
+  FIRST=$(find $SNAPSHOT/* -maxdepth 0 -type d | sort)
+  echo "First snapshots:"
+  echo "$FIRST"
+
 
   for i in {1..10}
   do
@@ -83,14 +86,16 @@ test_local_latest(){
     sleep 1
   done
 
-  # should be 10 dirs in .snapshot
-  LAST=$(find $SNAPSHOT/* -maxdepth 0 -type d | sort)
-  intersection_set=$(echo "${FIRST[@]}" "${LAST[@]}" | sed 's/ /\n/g' | sort | uniq -d)
-  echo "$intersection_set"
-
   X=$(find $SNAPSHOT/* -maxdepth 0 -type d | wc -l)
   test_equal "$X" 10 "Keep Snapshot "
 
+  # should be 10 dirs in .snapshot
+  LAST=$(find $SNAPSHOT/* -maxdepth 0 -type d | sort)
+  echo "Last snapshots:"
+  echo "$LAST"
+
+  count=$(echo "${FIRST[@]}" "${LAST[@]}" | sed 's/ /\n/g' | sort | uniq -d | wc -l)
+  test_equal $count 0 "keep latest"
 }
 
 ####
@@ -103,6 +108,9 @@ if [[ $(id -u) -ne 0 ]] ; then
   echo "testing needs privileged access to btrfs filesystem actions. please run as root"
   exit $RESULT
 fi
+
+# in case the last didn't clean all
+cleanup_btrfs
 
 setup_btrfs
 test_local_sync
