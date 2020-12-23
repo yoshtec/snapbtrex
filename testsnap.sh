@@ -38,10 +38,11 @@ setup_btrfs() {
 
   btrfs subvolume create "$SUBVOLUME"
   mkdir "$SNAPSHOT"
-  mkdir $LMNT/.sync
+  mkdir "$LMNT/.sync"
 
   touch "$SUBVOLUME/file.file"
   head -c 1M </dev/urandom >"$SUBVOLUME/randomfile.file"
+
 }
 
 cleanup_btrfs (){
@@ -103,13 +104,13 @@ if [[ $(id -u) -ne 0 ]] ; then
   exit $RESULT
 fi
 
-setup
+setup_btrfs
 test_local_sync
-cleanup
+cleanup_btrfs
 
-setup
+setup_btrfs
 test_local_latest
-cleanup
+cleanup_btrfs
 
 exit $RESULT
 
