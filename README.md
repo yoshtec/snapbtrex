@@ -31,7 +31,8 @@ The scoring mechanism integrates e^x from (now-newer) to (now-older)
 so, new pairs will have high value, even if they are tightly packed,
 while older pairs will have high value if they are far apart.
 
-Alternatively you can also keep only the latest snapshots via `--keep-only-latest` or set a maximum age for your snapshots with the `--max-age` parameter.
+Alternatively you can also keep only the latest snapshots via `--keep-only-latest` 
+or set a maximum age for your snapshots with the `--max-age` parameter.
 
 ## Transferring Snapshots to Remote Host
 
@@ -73,37 +74,38 @@ ssh-copy-id snapbtr@123.45.56.78
 File: `/etc/sudoers.d/90_snapbtrrcv`
 
 Minimum content is this for receiving snapshots on a remote system:
-```
-snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs receive*
-```
+
+    snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs receive*
+
 
 If you want to link the latest transferred snapshot remotely with `--remote-link`
 then you will need another line (adopt path to your specific path):
 
-```
-snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/ln -sfn /path/to/backups/* /path/to/current/current-link
-```
+
+    snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/ln -sfn /path/to/backups/* /path/to/current/current-link
+
 
 If you want remote pruning of snapshots via `--remote-keep` option, then add this:
-```
-snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs subvolume delete*
-```
+
+    snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs subvolume delete*
+
 
 4\. Create a sudoers include file on the sending machine
 
 File: `/etc/sudoers.d/90_snapbtrsnd`
 
 Contents:
-```
-snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs send*
-snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs subvolume*
-snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs filesystem sync*
-```
+
+    snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs send*
+    snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs subvolume*
+    snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs filesystem sync*
+
 Hint 1: For a more secure setup you should include the specific paths at the
 sudoers files.
 
 Hint 2: On some Linux flavors you might find the btrfs tools in `/sbin/btrfs`
-opposed to `/bin/btrfs`, the sudoers files have to reflect that. Try using `which btrfs` to find out the full path to your `btrfs`.
+opposed to `/bin/btrfs`, the sudoers files have to reflect that. Try using
+`which btrfs` to find out the full path to your `btrfs`.
 
 
 ## Migrating from SnapBtr
@@ -130,13 +132,11 @@ sudo snapbtrex.py --snap /mnt/btrfs/@subvol1/ --path /mnt/btrfs/.mysnapshots/sub
 
 Snapshot and transfer to remote host every day at 4:10 am, keep 52 snapshots on
 the origin host (keeps all remote backups, unless you delete them manually)
-```
-10 4    * * *   snapbtr /opt/snapbtrex/snapbtrex.py --snap /mnt/btrfs/@subvol1/ --path /mnt/btrfs/.mysnapshots/subvol1/ --target-backups 52 --verbose --remote-host 123.45.56.78 --remote-dir /mnt/btrfs/.backup/subvol1/  >> /var/log/snapbtrex.log
-```
 
+    10 4    * * *   snapbtr /opt/snapbtrex/snapbtrex.py --snap /mnt/btrfs/@subvol1/ --path /mnt/btrfs/.mysnapshots/subvol1/ --target-backups 52 --verbose --remote-host 123.45.56.78 --remote-dir /mnt/btrfs/.backup/subvol1/  >> /var/log/snapbtrex.log
 
 Snapshot and transfer to remote host every day at 4:20 am, keep 10 snapshots on
 the origin host and keep only 50 snapshots on the remote host.
-```
-20 4    * * *   snapbtr /opt/snapbtrex/snapbtrex.py --snap /mnt/btrfs/@subvol2/ --path /mnt/btrfs/.mysnapshots/subvol2/ --target-backups 10 --verbose --remote-host 123.45.56.78 --remote-dir /mnt/btrfs/.backup/subvol2/ --remote-keep 50 >> /var/log/snapbtrex.log
-```
+    
+    20 4    * * *   snapbtr /opt/snapbtrex/snapbtrex.py --snap /mnt/btrfs/@subvol2/ --path /mnt/btrfs/.mysnapshots/subvol2/ --target-backups 10 --verbose --remote-host 123.45.56.78 --remote-dir /mnt/btrfs/.backup/subvol2/ --remote-keep 50 >> /var/log/snapbtrex.log
+

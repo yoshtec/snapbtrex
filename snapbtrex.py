@@ -150,7 +150,7 @@ import os.path
 import sys
 import time
 
-DATE_FORMAT = '%Y%m%d-%H%M%S'  # date format used for directories to clean
+DATE_FORMAT = "%Y%m%d-%H%M%S"  # date format used for directories to clean
 
 DEFAULT_KEEP_BACKUPS = 10
 
@@ -161,7 +161,7 @@ LOG_STDERR = "STDERR > "
 LOG_OUTPUT = "OUTPUT > "
 
 # find TIME_SCALE: t < 2**32 => e**(t/c) < 2**32
-TIME_SCALE = math.ceil(float((2**32) / math.log(2**32)))
+TIME_SCALE = math.ceil(float((2 ** 32) / math.log(2 ** 32)))
 
 
 def timef(x):
@@ -176,16 +176,13 @@ def timef(x):
 def timestamp(x):
     try:
         v = _timestamp(x)
-    except ZeroDivisionError:
+    except ValueError:
         v = None
     return v
 
 
 def _timestamp(x):
-    return time.mktime(
-               time.strptime(
-                   os.path.split(x)[1],
-                   DATE_FORMAT))
+    return time.mktime(time.strptime(os.path.split(x)[1], DATE_FORMAT))
 
 
 def sorted_age(dirs, max_age):
@@ -227,10 +224,13 @@ def _sorted_value(dirs):
     # Remaining candidates for yield,
     # except the "max" one (latest)
     candidates = dict(
-        all_but_last((x, xf)
-                     for xf, x
-                     in sorted((timef(y), y) for y in dirs)
-                     if xf))
+        all_but_last(
+            (x, xf)
+            for xf, x
+            in sorted((timef(y), y) for y in dirs)
+            if xf
+        )
+    )
     # Keep going as long as there is anything to remove
     while len(candidates) > 1:
         # Get candidates ordered by timestamp (as v is monotonic in timestamp)
@@ -240,7 +240,8 @@ def _sorted_value(dirs):
         diffs = list(
             (to_tf - frm_tf, frm, to)
             for ((frm_tf, frm), (to_tf, to))
-            in poles(remain))
+            in poles(remain)
+        )
         # Select the least important one
         mdiff, mfrm, mto = min(diffs)
 
@@ -269,7 +270,8 @@ class Operations:
             args,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            shell=shell)
+            shell=shell
+        )
         stdout, stderr = p.communicate()
         if stdout:
             self.trace(LOG_OUTPUT + stdout.decode("utf-8"))
@@ -313,15 +315,14 @@ class Operations:
         # yt: changed to readonly snapshots
         newdir = os.path.join(self.path, self.datestamp())
         self.trace(LOG_LOCAL + "snapshotting path=%s to newdir=%s", path, newdir)
-        args = ["sudo", "btrfs", "subvolume", "snapshot", "-r",
-                path,
-                newdir]
+        args = ["sudo", "btrfs", "subvolume", "snapshot", "-r", path, newdir]
         self.check_call(args)
         self.sync(self.path)  # yt: make sure the new snap is on the disk
         self.trace(LOG_LOCAL + "done snapshotting ")
         return newdir  # yt: return the latest snapshot
 
-    def datestamp(self, secs=None):
+    @staticmethod
+    def datestamp(secs=None):
         return time.strftime(DATE_FORMAT, time.gmtime(secs))
 
     def trace(self, *args, **kwargs):
@@ -335,7 +336,8 @@ class Operations:
                 os.path.join(self.path, snap) +
                 " | pv -brtfL " + rate_limit + " | " +
                 "ssh -p " + ssh_port + " " + receiver +
-                " \' sudo btrfs receive " + receiver_path + " \'"]
+                " \' sudo btrfs receive " + receiver_path + " \'"
+                ]
         # TODO: breakup the pipe stuff and do it without shell=True, currently it has problems with pipes :(
         self.check_call(args, shell=True)
 
@@ -371,7 +373,8 @@ class Operations:
         args = ["sudo btrfs send -v " +
                 os.path.join(self.path, snap) +
                 " | pv -brtf | "
-                "sudo btrfs receive -v " + target]
+                "sudo btrfs receive -v " + target
+                ]
         self.check_call(args, shell=True)
 
     def sync_withparent(self, parent_snap, snap, target_path):
@@ -459,7 +462,7 @@ class FakeOperations(DryOperations):
 
 def cleandir(operations, targets):
     """ Perform actual cleanup of using 'operations' until 'targets' are met """
-    
+
     trace = operations.trace
     keep_backups = targets.keep_backups
     keep_latest = targets.keep_latest
@@ -471,7 +474,7 @@ def cleandir(operations, targets):
     last_dirs = []
 
     trace(LOG_LOCAL + "Parameters for cleandir: keep_backups=%s, target_freespace=%s, target_backups=%s, max_age=%s," +
-                      " keep_latest=%s ", keep_backups, target_fsp, target_backups, max_age, keep_latest)
+          " keep_latest=%s ", keep_backups, target_fsp, target_backups, max_age, keep_latest)
 
     while True:
         do_del = None
@@ -690,7 +693,7 @@ def main(argv):
             def parse(cls, target_str):
                 import re
                 form = cls.format % \
-                    "|".join(x for x in cls.mods.iterkeys() if x is not None)
+                       "|".join(x for x in cls.mods.iterkeys() if x is not None)
                 m = re.match(form, target_str, re.IGNORECASE)
                 if m:
                     val, mod = m.groups()
@@ -726,18 +729,18 @@ def main(argv):
 
             @staticmethod
             def eval(val, mod):
-                return val * 1024**Space.mods[mod]
+                return val * 1024 ** Space.mods[mod]
 
         class Age(UnitInt):
-            format = "([0-9]+)(%s)?" 
+            format = "([0-9]+)(%s)?"
             mods = {
                 None: 1,
                 's': 1,
                 'm': 60,
-                'h': 60*60,
-                'd': 24*60*60,
-                'w': 7*24*60*60,
-                'y': (52*7+1)*24*60*60}  # year = 52 weeks + 1 or 2 days
+                'h': 60 * 60,
+                'd': 24 * 60 * 60,
+                'w': 7 * 24 * 60 * 60,
+                'y': (52 * 7 + 1) * 24 * 60 * 60}  # year = 52 weeks + 1 or 2 days
 
             @staticmethod
             def eval(val, mod):
@@ -795,86 +798,101 @@ def main(argv):
             type=Age,
             help='Prefer removal of backups older than MAX_AGE seconds. MAX_AGE is #seconds, ' +
                  'or given with m (minutes), h (hours), d (days), w (weeks), y (years = 52w + 1d).')
-        
+
         target_group.add_argument(
-             '--keep-only-latest', '-L',
-             dest='keep_latest',
-             action='store_true',
-             help='lets you keep only the latest snapshots')
+            '--keep-only-latest', '-L',
+            dest='keep_latest',
+            action='store_true',
+            help='lets you keep only the latest snapshots')
 
         snap_group = parser.add_mutually_exclusive_group(required=False)
 
         snap_group.add_argument(
-            '--snap', '-s', '--snap-this',
+            '--snap',
+            '-s',
+            '--snap-this',
             metavar='SUBVOL',
             default='.',
-            help='Take snapshot of SUBVOL on invocation')
+            help='Take snapshot of SUBVOL on invocation'
+        )
 
         snap_group.add_argument(
-            '--no-snap', '-S',
+            '--no-snap',
+            '-S',
             dest='snap',
             help='Do not take snapshot',
             action='store_const',
-            const=None)
+            const=None
+        )
 
         parser.add_argument(
             '--test',
             help='Execute built-in tests',
-            action='store_true')
+            action='store_true'
+        )
 
         parser.add_argument(
             '--explain',
             help='Explain what %(prog)s does (and stop)',
-            action='store_true')
+            action='store_true'
+        )
 
         parser.add_argument(
             '--dry-run',
             help='Do not execute commands, but print shell commands to stdout that would be executed',
             dest='dry_run',
-            action='store_true')
+            action='store_true'
+        )
 
         parser.add_argument(
             '--verbose', '-v',
             help='Verbose output',
-            action='store_true')
+            action='store_true'
+        )
 
         transfer_group = parser.add_argument_group(
             title='Transfer',
             description='Transfer snapshots to other hosts via ssh. ' +
                         'It is assumed that the user running the script is run can connect to the remote host ' +
-                        'via keys and without passwords. See --explain or visit the homepage for more info')
+                        'via keys and without passwords. See --explain or visit the homepage for more info'
+        )
 
         transfer_group.add_argument(
             '--remote-host',
             metavar='HOST',
             dest='remote_host',
-            help='Transfer to target host via ssh.')
+            help='Transfer to target host via ssh.'
+        )
 
         transfer_group.add_argument(
             '--remote-dir',
             metavar='PATH',
             dest='remote_dir',
-            help='Transfer the snapshot to this PATH on the target host')
+            help='Transfer the snapshot to this PATH on the target host'
+        )
 
         transfer_group.add_argument(
             '--remote-link',
             metavar='LINK',
             dest='remote_link',
-            help='Create a link the transferred snapshot to this LINK')
+            help='Create a link the transferred snapshot to this LINK'
+        )
 
         transfer_group.add_argument(
             '--remote-keep',
             metavar='N',
             type=int,
             dest='remote_keep',
-            help='Cleanup remote backups until N backups remain, if unset keep all remote transferred backups')
+            help='Cleanup remote backups until N backups remain, if unset keep all remote transferred backups'
+        )
 
         transfer_group.add_argument(
             '--ssh-port',
             metavar='SSHPORT',
             dest='ssh_port',
             default='22',
-            help='SSH port')
+            help='SSH port'
+        )
 
         transfer_group.add_argument(
             '--rate-limit',
@@ -883,24 +901,28 @@ def main(argv):
             default='0',
             help='Limit the transfer to a maximum of RATE bytes per ' +
                  'second. A suffix of "k", "m", "g", or "t" can be added ' +
-                 'to denote kilobytes (*1024), megabytes, and so on.')
+                 'to denote kilobytes (*1024), megabytes, and so on.'
+        )
 
         sync_group = parser.add_argument_group(
             title='Sync Local',
-            description='Transfer snapshots to another local (btrfs) filesystem.')
+            description='Transfer snapshots to another local (btrfs) filesystem.'
+        )
 
         sync_group.add_argument(
             '--sync-target',
             metavar='PATH',
             dest='sync_dir',
-            help='Copy snapshot to this path')
+            help='Copy snapshot to this path'
+        )
 
         sync_group.add_argument(
             '--sync-keep',
             metavar='N',
             type=int,
             dest='sync_keep',
-            help='Cleanup local synced backups until N backups remain, if unset keep all locally synced backups')
+            help='Cleanup local synced backups until N backups remain, if unset keep all locally synced backups'
+        )
 
         pa = parser.parse_args(argv[1:])
         return pa, parser
@@ -942,8 +964,9 @@ def main(argv):
                 '20101201-060000': 6,
                 '20101201-070000': 7,
                 '20101201-080000': 8,
-                },
-            space=5)
+            },
+            space=5
+        )
     elif pa.dry_run:
         trace(" ## DRY RUN ##")
         trace(" ## DRY RUN ## Dry Run mode: disk-modifying operations are only displayed without execution")
