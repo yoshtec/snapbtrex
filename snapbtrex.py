@@ -223,25 +223,14 @@ def _sorted_value(dirs):
 
     # Remaining candidates for yield,
     # except the "max" one (latest)
-    candidates = dict(
-        all_but_last(
-            (x, xf)
-            for xf, x
-            in sorted((timef(y), y) for y in dirs)
-            if xf
-        )
-    )
+    candidates = dict(all_but_last((x, xf) for xf, x in sorted((timef(y), y) for y in dirs) if xf))
     # Keep going as long as there is anything to remove
     while len(candidates) > 1:
         # Get candidates ordered by timestamp (as v is monotonic in timestamp)
         remain = sorted((v, k) for k, v in candidates.items())
         # Find the "amount of information we loose by deleting the
         # latest of the pair"
-        diffs = list(
-            (to_tf - frm_tf, frm, to)
-            for ((frm_tf, frm), (to_tf, to))
-            in poles(remain)
-        )
+        diffs = list((to_tf - frm_tf, frm, to) for ((frm_tf, frm), (to_tf, to)) in poles(remain))
         # Select the least important one
         mdiff, mfrm, mto = min(diffs)
 
@@ -267,10 +256,7 @@ class Operations:
         self.trace(LOG_EXEC + cmd_str)
         import subprocess
         p = subprocess.Popen(
-            args,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            shell=shell
+            args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=shell
         )
         stdout, stderr = p.communicate()
         if stdout:
@@ -307,9 +293,13 @@ class Operations:
         return [d for d in os.listdir(target_path) if timef(d)]
 
     def listremote_dir(self, receiver, receiver_path, ssh_port):
-        self.trace(LOG_REMOTE + "list remote files host=%s, dir=%s", receiver, receiver_path)
+        self.trace(
+            LOG_REMOTE + "list remote files host=%s, dir=%s", receiver, receiver_path
+        )
         args = ["ssh", "-p", ssh_port, receiver, "ls -1 " + receiver_path]
-        return [d for d in self.check_call(args, dry_safe=True).splitlines() if timef(d)]
+        return [
+            d for d in self.check_call(args, dry_safe=True).splitlines() if timef(d)
+        ]
 
     def snap(self, path):
         # yt: changed to readonly snapshots
@@ -693,7 +683,7 @@ def main(argv):
             def parse(cls, target_str):
                 import re
                 form = cls.format % \
-                       "|".join(x for x in cls.mods.iterkeys() if x is not None)
+                    "|".join(x for x in cls.mods.iterkeys() if x is not None)
                 m = re.match(form, target_str, re.IGNORECASE)
                 if m:
                     val, mod = m.groups()
@@ -725,7 +715,8 @@ def main(argv):
                 None: 0,
                 'K': 1,
                 'M': 2,
-                'G': 3}
+                'G': 3
+            }
 
             @staticmethod
             def eval(val, mod):
@@ -758,14 +749,18 @@ def main(argv):
             description='keeps btrfs snapshots for backup, visit https://github.com/yoshtec/snapbtrex for more insight')
 
         parser.add_argument(
-            '--path', '-p', '--snap-to',
+            '--path',
+            '-p',
+            '--snap-to',
             metavar='PATH',
             required=True,
-            help='Target path for new snapshots and cleanup operations')
+            help='Target path for new snapshots and cleanup operations'
+        )
 
         target_group = parser.add_argument_group(
             title='Cleanup',
-            description='Delete backup snapshots until the targets are met')
+            description='Delete backup snapshots until the targets are met'
+        )
 
         target_group.add_argument(
             '--target-freespace', '-F',
@@ -774,36 +769,45 @@ def main(argv):
             default=None,
             type=Space,
             help='Cleanup PATH until at least SIZE is free. SIZE is #bytes, ' +
-                 'or given with K, M, G or T respectively for kilo, ...')
+                 'or given with K, M, G or T respectively for kilo, ...'
+        )
 
         target_group.add_argument(
-            '--target-backups', '-B',
+            '--target-backups',
+            '-B',
             dest='target_backups',
             metavar='#',
             type=int,
-            help='Cleanup PATH until at most B backups remain')
+            help='Cleanup PATH until at most B backups remain'
+        )
 
         target_group.add_argument(
-            '--keep-backups', '-K',
+            '--keep-backups',
+            '-K',
             metavar='N',
             type=int,
             default=DEFAULT_KEEP_BACKUPS,
-            help='Keep minimum of N backups -> This is a lower bound')
+            help='Keep minimum of N backups -> This is a lower bound'
+        )
 
         target_group.add_argument(
-            '--max-age', '-A',
+            '--max-age',
+            '-A',
             dest='max_age',
             metavar='MAX_AGE',
             default=None,
             type=Age,
             help='Prefer removal of backups older than MAX_AGE seconds. MAX_AGE is #seconds, ' +
-                 'or given with m (minutes), h (hours), d (days), w (weeks), y (years = 52w + 1d).')
+                 'or given with m (minutes), h (hours), d (days), w (weeks), y (years = 52w + 1d).'
+        )
 
         target_group.add_argument(
-            '--keep-only-latest', '-L',
+            '--keep-only-latest',
+            '-L',
             dest='keep_latest',
             action='store_true',
-            help='lets you keep only the latest snapshots')
+            help='lets you keep only the latest snapshots'
+        )
 
         snap_group = parser.add_mutually_exclusive_group(required=False)
 
