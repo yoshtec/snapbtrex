@@ -37,8 +37,8 @@ Both hosts have to be prepared as in the setup instructions if you want to call 
 call snapbtrex as standalone script if you have appropriate rights.
 
 Specify your target host via  `--remote-host` and the directory with the `--remote-dir` options. Both options have to be
-present. The target directory has to be located within a btrfs file system and it has to be mounted via the root volume,
-or else btrfs might fail to receive snapshots.
+present. The target directory has to be located within a btrfs file system, and it has to be mounted via the root
+volume, or else btrfs might fail to receive snapshots.
 
 ### Setup instructions
 
@@ -51,13 +51,11 @@ steps.
 sudo adduser snapbtr
 ```
 
-2\. generate ssh key on sender and copy public key to receiving machine
+2\. generate ssh key on the sender and copy public key to receiving machine
 
 ```sh
 su - snapbtr
-
-ssh-keygen -t rsa
-
+ssh-keygen
 ssh-copy-id snapbtr@123.45.56.78
 ```
 
@@ -67,16 +65,22 @@ File: `/etc/sudoers.d/90_snapbtrrcv`
 
 Minimum content is this for receiving snapshots on a remote system:
 
-    snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs receive*
+```sh
+snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs receive*
+```
 
 If you want to link the latest transferred snapshot remotely with `--remote-link`
 then you will need another line (adopt path to your specific path):
 
-    snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/ln -sfn /path/to/backups/* /path/to/current/current-link
+```sh
+snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/ln -sfn /path/to/backups/* /path/to/current/current-link
+```
 
 If you want remote pruning of snapshots via `--remote-keep` option, then add this:
 
-    snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs subvolume delete*
+```sh
+snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs subvolume delete*
+```
 
 4\. Create a sudoers include file on the sending machine
 
@@ -84,25 +88,17 @@ File: `/etc/sudoers.d/90_snapbtrsnd`
 
 Contents:
 
-    snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs send*
-    snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs subvolume*
-    snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs filesystem sync*
+```sh
+snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs send*
+snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs subvolume*
+snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs filesystem sync*
+```
 
 Hint 1: For a more secure setup you should include the specific paths at the sudoers files.
 
 Hint 2: On some Linux flavors you might find the btrfs tools in `/sbin/btrfs`
 opposed to `/bin/btrfs`, the sudoers files have to reflect that. Try using
 `which btrfs` to find out the full path to your `btrfs`.
-
-## Migrating from SnapBtr
-
-If you created snapshots with [snapbtr](https://btrfs.wiki.kernel.org/index.php/SnapBtr)
-then those snapshots were created as read/write snapshots. The sending of snapshots to remote hosts demands that those
-snaps are read only. You can change rw snaps to ro snaps in the directory of the snapshots via:
-
-```sh
-sudo find . -maxdepth 1 -type d -exec btrfs property set -t s {} ro true \;
-```
 
 ## Examples
 
@@ -114,15 +110,34 @@ Snapshot a volume and keep 20 versions:
 sudo snapbtrex.py --snap /mnt/btrfs/@subvol1/ --path /mnt/btrfs/.mysnapshots/subvol1/ --target-backups 20
 ```
 
+Snapshot a volume and copy the snapshot to different device
+
+```sh
+sudo snapbtrex.py --snap /mnt/btrfs/@subvol1/ --path /mnt/btrfs/.mysnapshots/subvol1/ --target-backups 20 --sync /mnt/btrfs_archive/backups
+```
+
 ### Crontab
 
 Snapshot and transfer to remote host every day at 4:10 am, keep 52 snapshots on the origin host (keeps all remote
 backups, unless you delete them manually)
 
-    10 4    * * *   snapbtr /opt/snapbtrex/snapbtrex.py --snap /mnt/btrfs/@subvol1/ --path /mnt/btrfs/.mysnapshots/subvol1/ --target-backups 52 --verbose --remote-host 123.45.56.78 --remote-dir /mnt/btrfs/.backup/subvol1/  >> /var/log/snapbtrex.log
+```sh
+10 4    * * *   snapbtr /opt/snapbtrex/snapbtrex.py --snap /mnt/btrfs/@subvol1/ --path /mnt/btrfs/.mysnapshots/subvol1/ --target-backups 52 --verbose --remote-host 123.45.56.78 --remote-dir /mnt/btrfs/.backup/subvol1/  >> /var/log/snapbtrex.log
+```
 
 Snapshot and transfer to remote host every day at 4:20 am, keep 10 snapshots on the origin host and keep only 50
 snapshots on the remote host.
 
-    20 4    * * *   snapbtr /opt/snapbtrex/snapbtrex.py --snap /mnt/btrfs/@subvol2/ --path /mnt/btrfs/.mysnapshots/subvol2/ --target-backups 10 --verbose --remote-host 123.45.56.78 --remote-dir /mnt/btrfs/.backup/subvol2/ --remote-keep 50 >> /var/log/snapbtrex.log
+```sh
+20 4    * * *   snapbtr /opt/snapbtrex/snapbtrex.py --snap /mnt/btrfs/@subvol2/ --path /mnt/btrfs/.mysnapshots/subvol2/ --target-backups 10 --verbose --remote-host 123.45.56.78 --remote-dir /mnt/btrfs/.backup/subvol2/ --remote-keep 50 >> /var/log/snapbtrex.log
+```
 
+## Migrating from SnapBtr
+
+If you created snapshots with [snapbtr](https://btrfs.wiki.kernel.org/index.php/SnapBtr)
+then those snapshots were created as read/write snapshots. The sending of snapshots to remote hosts demands that those
+snaps are read only. You can change rw snaps to ro snaps in the directory of the snapshots via:
+
+```sh
+sudo find . -maxdepth 1 -type d -exec btrfs property set -t s {} ro true \;
+```

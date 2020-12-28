@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -x #Echo commands for debugging
+#set -x #Echo commands for debugging
 
 LIMG="local.test.img"
 LMNT="btrfs.test.local"
@@ -103,10 +103,10 @@ test_local_latest(){
 }
 
 test_local_size(){
-  for i in {1..10}
+  for i in {1..15}
   do
     head -c 10M </dev/urandom >"$SUBVOLUME/randomfile.file"
-    ./snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --target-backups 10 --verbose --target-freespace 50M
+    ./snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --verbose --target-freespace 50M
     test_equal "$?" 0 "Run: $i"
     df "./$LMNT/"
     sleep 1

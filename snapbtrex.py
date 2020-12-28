@@ -92,8 +92,7 @@ transfer with backups with ssh
 
 2. generate ssh key on snd put public into rcv
 --
-  ssh-keygen -t rsa
-
+  ssh-keygen
   ssh-copy-id snapbtr@123.45.56.78
 --
 
@@ -132,14 +131,6 @@ Contents:
   snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs filesystem sync*
   snapbtr ALL=(root:nobody) NOPASSWD:NOEXEC: /bin/btrfs subvolume*
 --
-
-== Precautions
-if you created your snapshots with an old version of snapbtr than those
-snapshots have been created as read/write snapshots. The sending of snapshots
-to remote hosts demands that those snaps are readonly. You can change rw snaps
-to ro snaps in the directory of the snapshots via:
-
-  sudo find . -maxdepth 1 -type d -exec btrfs property set -t s {} ro true \\;
 
 """
 
@@ -374,10 +365,8 @@ class Operations:
 
     def sync_withparent(self, parent_snap, snap, target_path):
         self.trace(LOG_LOCAL + f"send snapshot from {snap} with parent {parent_snap} to path={target_path}")
-        args = ["sudo btrfs send -v -p " +
-                os.path.join(self.path, parent_snap) + " " +
-                os.path.join(self.path, snap) +
-                " | pv -brtf | " +
+        args = [f"sudo btrfs send -v -p {os.path.join(self.path, parent_snap)} {os.path.join(self.path, snap)}"
+                " | pv -brtf | " 
                 f"sudo btrfs receive -v {target_path}"
                 ]
         self.check_call(args, shell=True)
@@ -409,12 +398,7 @@ class DryOperations(Operations):
 
 
 class FakeOperations(DryOperations):
-    def __init__(self,
-                 path,
-                 trace=None,
-                 dirs=None,
-                 space=None,
-                 snap_space=None):
+    def __init__(self, path, trace=None, dirs=None, space=None, snap_space=None):
         Operations.__init__(self, path=path, trace=trace)
         if dirs is None:
             dirs = {}
@@ -437,21 +421,21 @@ class FakeOperations(DryOperations):
         del self.dirs[dir]
 
     def listdir(self):
-        self.trace("listdir() = %s", self.dirs.keys())
+        self.trace(f"listdir() = {self.dirs.keys()}")
         return self.dirs.keys()
 
     def listdir_path(self, target_path):
-        dirs = ['20101201-030000', '20101201-040000', '20101201-050000']
-        self.trace("listdir_path() values=%s", dirs)
+        dirs = ["20101201-030000", "20101201-040000", "20101201-050000"]
+        self.trace(f"listdir_path() values={dirs}")
         return dirs
 
     def listremote_dir(self, receiver, receiver_path, ssh_port):
-        dirs = ['20101201-030000', '20101201-040000', '20101201-050000', '20101201-070000']
-        self.trace("listremotedir() r=%s, rp=%s, values=%s", receiver, receiver_path, dirs)
+        dirs = ["20101201-030000", "20101201-040000", "20101201-050000", "20101201-070000"]
+        self.trace(f"listremotedir() r={receiver}, rp={receiver_path}, values={dirs}")
         return dirs
 
     def freespace(self):
-        self.trace("freespace() = %s", self.space)
+        self.trace(f"freespace() = {self.space}")
         return self.space
 
 
@@ -469,8 +453,9 @@ def cleandir(operations, targets):
     last_dirs = []
 
     trace(LOG_LOCAL + f"Parameters for cleandir: keep_backups={keep_backups}, target_freespace={target_fsp}, "
-                      f"target_backups={target_backups}, max_age={max_age}, keep_latest={keep_latest}"
+          f"target_backups={target_backups}, max_age={max_age}, keep_latest={keep_latest}"
           )
+    next_del = None
 
     while True:
         do_del = None
@@ -478,17 +463,18 @@ def cleandir(operations, targets):
         dirs_len = len(dirs)
         if dirs_len <= 0:
             raise Exception("No more directories to clean")
-        elif sorted(dirs) == last_dirs:
-            raise Exception("Could not delete last snapshot: %s")
+        elif dirs == last_dirs:
+            raise Exception(f"Could not delete last snapshot: {next_del}")
         else:
             last_dirs = dirs
 
         # check at least keep this amount of backups
         if keep_backups is not None:
             if dirs_len <= keep_backups:
-                trace(LOG_LOCAL +
-                      f"Reached number of minimum backups to keep: {dirs_len}, stopping further deletion"
-                      )
+                trace(
+                    LOG_LOCAL +
+                    f"Reached number of minimum backups to keep: {dirs_len}, stopping further deletion"
+                )
                 break
 
         if target_fsp is not None:
@@ -686,6 +672,9 @@ def main(argv):
     import argparse
 
     class UnitInt(int):
+        format = ""
+        mods = {}
+
         @staticmethod
         def parse(cls, target_str):
             import re
@@ -758,190 +747,190 @@ def main(argv):
             return float(now - age)
 
     parser = argparse.ArgumentParser(
-        description='Keep btrfs snapshots for backup, optionally sync to snapshots locally or sends snapshots to '
-                    'remote systems via ssh. Visit https://github.com/yoshtec/snapbtrex for more insight.'
+        description="Keep btrfs snapshots for backup, optionally sync to snapshots locally or sends snapshots to "
+                    "remote systems via ssh. Visit https://github.com/yoshtec/snapbtrex for more insight."
     )
 
     parser.add_argument(
-        '--path',
-        '-p',
-        '--snap-to',
-        metavar='PATH',
+        "--path",
+        "-p",
+        "--snap-to",
+        metavar="PATH",
         required=False,
-        help='Target path for new snapshots and cleanup operations'
+        help="Target path for new snapshots and cleanup operations"
     )
 
     target_group = parser.add_argument_group(
-        title='Cleanup',
-        description='Delete backup snapshots until the targets are met'
+        title="Cleanup",
+        description="Delete backup snapshots until the targets are met"
     )
 
     target_group.add_argument(
-        '--target-freespace',
-        '-F',
-        dest='target_freespace',
-        metavar='SIZE',
+        "--target-freespace",
+        "-F",
+        dest="target_freespace",
+        metavar="SIZE",
         default=None,
         type=Space,
-        help='Cleanup PATH until at least SIZE is free. SIZE is #bytes, ' +
-             'or given with K, M, G or T respectively for kilo, ...'
+        help="Cleanup PATH until at least SIZE is free. SIZE is #bytes, " +
+             "or given with K, M, G or T respectively for kilo, ..."
     )
 
     target_group.add_argument(
-        '--target-backups',
-        '-B',
-        dest='target_backups',
-        metavar='#',
+        "--target-backups",
+        "-B",
+        dest="target_backups",
+        metavar="#",
         type=int,
-        help='Cleanup PATH until at most B backups remain'
+        help="Cleanup PATH until at most B backups remain"
     )
 
     target_group.add_argument(
-        '--keep-backups',
-        '-K',
-        metavar='N',
+        "--keep-backups",
+        "-K",
+        metavar="N",
         type=int,
         default=DEFAULT_KEEP_BACKUPS,
-        help='Keep minimum of N backups -> This is a lower bound. the lower bound is valid for all other options'
+        help="Keep minimum of N backups -> This is a lower bound. the lower bound is valid for all other options"
     )
 
     target_group.add_argument(
-        '--max-age',
-        '-A',
-        dest='max_age',
-        metavar='MAX_AGE',
+        "--max-age",
+        "-A",
+        dest="max_age",
+        metavar="MAX_AGE",
         default=None,
         type=Age,
-        help='Prefer removal of backups older than MAX_AGE seconds. MAX_AGE is #seconds, ' +
-             'or given with m (minutes), h (hours), d (days), w (weeks), y (years = 52w + 1d).'
+        help="Prefer removal of backups older than MAX_AGE seconds. MAX_AGE is #seconds, " +
+             "or given with m (minutes), h (hours), d (days), w (weeks), y (years = 52w + 1d)."
     )
 
     target_group.add_argument(
-        '--keep-only-latest',
-        '-L',
-        dest='keep_latest',
-        action='store_true',
-        help='lets you keep only the latest snapshots'
+        "--keep-only-latest",
+        "-L",
+        dest="keep_latest",
+        action="store_true",
+        help="lets you keep only the latest snapshots"
     )
 
     snap_group = parser.add_mutually_exclusive_group(required=False)
 
     snap_group.add_argument(
-        '--snap',
-        '-s',
-        '--snap-this',
-        metavar='SUBVOL',
-        default='.',
-        help='Take snapshot of SUBVOL on invocation'
+        "--snap",
+        "-s",
+        "--snap-this",
+        metavar="SUBVOL",
+        default=".",
+        help="Take snapshot of SUBVOL on invocation"
     )
 
     snap_group.add_argument(
-        '--no-snap',
-        '-S',
-        dest='snap',
-        help='Do not take snapshot',
-        action='store_const',
+        "--no-snap",
+        "-S",
+        dest="snap",
+        help="Do not take snapshot",
+        action="store_const",
         const=None
     )
 
     parser.add_argument(
-        '--test',
-        help='Execute built-in tests',
-        action='store_true'
+        "--test",
+        help="Execute built-in tests",
+        action="store_true"
     )
 
     parser.add_argument(
-        '--explain',
-        help='Explain what %(prog)s does (and stop)',
-        action='store_true'
+        "--explain",
+        help="Explain what %(prog)s does (and stop)",
+        action="store_true"
     )
 
     parser.add_argument(
-        '--dry-run',
-        help='Do not execute commands, but print shell commands to stdout that would be executed',
-        dest='dry_run',
-        action='store_true'
+        "--dry-run",
+        help="Do not execute commands, but print shell commands to stdout that would be executed",
+        dest="dry_run",
+        action="store_true"
     )
 
     parser.add_argument(
-        '--verbose',
-        '-v',
-        help='Verbose output',
-        action='store_true'
+        "--verbose",
+        "-v",
+        help="Verbose output",
+        action="store_true"
     )
 
     transfer_group = parser.add_argument_group(
-        title='Transfer',
-        description='Transfer snapshots to other hosts via ssh. ' +
-                    'It is assumed that the user running the script is run can connect to the remote host ' +
-                    'via keys and without passwords. See --explain or visit the homepage for more info'
+        title="Transfer",
+        description="Transfer snapshots to other hosts via ssh. " +
+                    "It is assumed that the user running the script is run can connect to the remote host " +
+                    "via keys and without passwords. See --explain or visit the homepage for more info"
     )
 
     transfer_group.add_argument(
-        '--remote-host',
-        metavar='HOST',
-        dest='remote_host',
-        help='Transfer to target host via ssh.'
+        "--remote-host",
+        metavar="HOST",
+        dest="remote_host",
+        help="Transfer to target host via ssh."
     )
 
     transfer_group.add_argument(
-        '--remote-dir',
-        metavar='PATH',
-        dest='remote_dir',
-        help='Transfer the snapshot to this PATH on the target host'
+        "--remote-dir",
+        metavar="PATH",
+        dest="remote_dir",
+        help="Transfer the snapshot to this PATH on the target host"
     )
 
     transfer_group.add_argument(
-        '--remote-link',
-        metavar='LINK',
-        dest='remote_link',
-        help='Create a link the transferred snapshot to this LINK'
+        "--remote-link",
+        metavar="LINK",
+        dest="remote_link",
+        help="Create a link the transferred snapshot to this LINK"
     )
 
     transfer_group.add_argument(
-        '--remote-keep',
-        metavar='N',
+        "--remote-keep",
+        metavar="N",
         type=int,
-        dest='remote_keep',
-        help='Cleanup remote backups until N backups remain, if unset keep all remote transferred backups'
+        dest="remote_keep",
+        help="Cleanup remote backups until N backups remain, if unset keep all remote transferred backups"
     )
 
     transfer_group.add_argument(
-        '--ssh-port',
-        metavar='SSHPORT',
-        dest='ssh_port',
-        default='22',
-        help='SSH port'
+        "--ssh-port",
+        metavar="SSHPORT",
+        dest="ssh_port",
+        default="22",
+        help="SSH port"
     )
 
     transfer_group.add_argument(
-        '--rate-limit',
-        metavar='RATE',
-        dest='rate_limit',
-        default='0',
-        help='Limit the transfer to a maximum of RATE bytes per ' +
-             'second. A suffix of "k", "m", "g", or "t" can be added ' +
-             'to denote kilobytes (*1024), megabytes, and so on.'
+        "--rate-limit",
+        metavar="RATE",
+        dest="rate_limit",
+        default="0",
+        help="Limit the transfer to a maximum of RATE bytes per " +
+             "second. A suffix of \"k\", \"m\", \"g\", or \"t\" can be added " +
+             "to denote kilobytes (*1024), megabytes, and so on."
     )
 
     sync_group = parser.add_argument_group(
-        title='Sync Local',
-        description='Transfer snapshots to another local (btrfs) filesystem.'
+        title="Sync Local",
+        description="Transfer snapshots to another local (btrfs) filesystem."
     )
 
     sync_group.add_argument(
-        '--sync-target',
-        metavar='PATH',
-        dest='sync_dir',
-        help='Copy snapshot to this path'
+        "--sync-target",
+        metavar="PATH",
+        dest="sync_dir",
+        help="Copy snapshot to this path"
     )
 
     sync_group.add_argument(
-        '--sync-keep',
-        metavar='N',
+        "--sync-keep",
+        metavar="N",
         type=int,
-        dest='sync_keep',
-        help='Cleanup local synced backups until N backups remain, if unset keep all locally synced backups'
+        dest="sync_keep",
+        help="Cleanup local synced backups until N backups remain, if unset keep all locally synced backups"
     )
 
     # safety net if no arguments are given call for usage
@@ -977,15 +966,15 @@ def main(argv):
             path=pa.path,
             trace=trace,
             dirs={
-                '20101201-000000': 0,
-                '20101201-010000': 1,
-                '20101201-020000': 2,
-                '20101201-030000': 3,
-                '20101201-040000': 4,
-                '20101201-050000': 5,
-                '20101201-060000': 6,
-                '20101201-070000': 7,
-                '20101201-080000': 8,
+                "20101201-000000": 0,
+                "20101201-010000": 1,
+                "20101201-020000": 2,
+                "20101201-030000": 3,
+                "20101201-040000": 4,
+                "20101201-050000": 5,
+                "20101201-060000": 6,
+                "20101201-070000": 7,
+                "20101201-080000": 8,
             },
             space=5
         )

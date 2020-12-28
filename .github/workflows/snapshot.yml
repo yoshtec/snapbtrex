@@ -20,6 +20,16 @@ jobs:
       - name: Install pv dependency
         run: sudo apt-get install pv
 
+      - name: Setup SSH
+        run: |
+          ssh-keygen -t rsa -b 4096 -N '' -f ~/.ssh/id_rsa
+          cat ~/.ssh/id_rsa.pub | tee -a ~/.ssh/authorized_keys
+          chmod 600 ~/.ssh/authorized_keys
+          chmod 700 ~/.ssh
+
+      - name: Test SSH connection to localhost
+        run: ssh -vvv -i ~/.ssh/id_rsa -o BatchMode=yes -o StrictHostKeyChecking=no $(whoami)@localhost
+
       - name: Check if help is displayed
         run: ./snapbtrex.py --help
 
