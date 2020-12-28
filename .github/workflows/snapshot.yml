@@ -26,9 +26,12 @@ jobs:
           cat ~/.ssh/id_rsa.pub | tee -a ~/.ssh/authorized_keys
           chmod 600 ~/.ssh/authorized_keys
           chmod 700 ~/.ssh
+          sudo chmod -c 0755 ~/
+          ls -la ~/.ssh
+          sudo cat /etc/ssh/sshd_config
 
       - name: Test SSH connection to localhost
-        run: ssh -vvv -i ~/.ssh/id_rsa -o BatchMode=yes -o StrictHostKeyChecking=no $(whoami)@localhost
+        run: ssh -vv -i ~/.ssh/id_rsa -o BatchMode=yes -o StrictHostKeyChecking=no $(whoami)@localhost
 
       - name: Check if help is displayed
         run: ./snapbtrex.py --help
