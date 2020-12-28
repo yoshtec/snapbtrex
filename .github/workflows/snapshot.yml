@@ -20,5 +20,18 @@ jobs:
       - name: Install pv dependency
         run: sudo apt-get install pv
 
+      - name: Check if help is displayed
+        run: ./snapbtrex.py --help
+
+      - name: Check if explanation is displayed
+        run: ./snapbtrex.py
+
+      - name: run tests
+        run: |
+          ./snapbtrex.py --test --path . --verbose --target-freespace 1 -S --keep-backups=3
+          ./snapbtrex.py --test --path . --verbose --target-freespace 50T -S --keep-backups=3
+          ./snapbtrex.py --test --path . --verbose --max-age 20w --target-backups 4 -S --keep-backups=3
+          ./snapbtrex.py --test --path . --verbose --max-age 20y --target-backups 2 -S --keep-backups=3
+
       - name: Run snapshot test
         run: sudo ./testsnap.sh

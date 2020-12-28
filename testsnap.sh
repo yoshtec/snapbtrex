@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -x #Echo commands for debugging
 
 LIMG="local.test.img"
 LMNT="btrfs.test.local"
@@ -55,8 +56,8 @@ cleanup_btrfs (){
 test_local_sync(){
   for i in {1..20}
   do
-    echo "RUN: $i"
     ./snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --target-backups 10 --verbose --sync-target "./$LMNT/.sync/" --sync-keep 5
+    test_equal "$?" 0 "Run: $i"
     sleep 1
   done
 
@@ -72,8 +73,8 @@ test_local_sync(){
 test_local_latest(){
   for i in {1..5}
   do
-    echo "RUN: $i"
     ./snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --target-backups 10 --keep-only-latest --verbose
+    test_equal "$?" 0 "Run: $i"
     sleep 1
   done
 
@@ -84,8 +85,8 @@ test_local_latest(){
 
   for i in {1..10}
   do
-    echo "RUN: $i"
     ./snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --target-backups 10 --keep-only-latest --verbose
+    test_equal "$?" 0 "Run: $i"
     sleep 1
   done
 
@@ -99,6 +100,17 @@ test_local_latest(){
 
   count=$(echo "${FIRST[@]}" "${LAST[@]}" | sed 's/ /\n/g' | sort | uniq -d | wc -l)
   test_equal "$count" 0 "keep latest"
+}
+
+test_local_size(){
+  for i in {1..10}
+  do
+    head -c 10M </dev/urandom >"$SUBVOLUME/randomfile.file"
+    ./snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --target-backups 10 --verbose --target-freespace 50M
+    test_equal "$?" 0 "Run: $i"
+    df "./$LMNT/"
+    sleep 1
+  done
 }
 
 ####
@@ -122,6 +134,11 @@ cleanup_btrfs
 setup_btrfs
 test_local_latest
 cleanup_btrfs
+
+setup_btrfs
+test_local_size
+cleanup_btrfs
+
 
 exit $RESULT
 
