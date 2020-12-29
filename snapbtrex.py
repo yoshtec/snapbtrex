@@ -238,7 +238,7 @@ def _sorted_value(dirs):
 
 def freespace(path):
     st = os.statvfs(path)
-    print(st)  # https://www.spinics.net/lists/linux-btrfs/msg103660.html
+    # print(st)  # https://www.spinics.net/lists/linux-btrfs/msg103660.html
     return st.f_bavail * st.f_bsize
 
 
@@ -504,7 +504,8 @@ def cleandir(operations, targets):
             if dirs_len <= keep_backups:
                 trace(
                     LOG_LOCAL
-                    + f"Reached number of minimum backups to keep: {dirs_len}, stopping further deletion"
+                    + f"current amount of backups: {dirs_len} have to keep a minimum of {keep_backups},"
+                    f" stopping further deletion"
                 )
                 break
 
