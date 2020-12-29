@@ -992,6 +992,19 @@ def main(argv):
         parser.print_help()
         return 1
 
+    # test if pv is installed for needed actions
+    if (
+        not (pa.remote_host is None and pa.remote_dir is None)
+        or pa.sync_dir is not None
+    ):
+        import shutil
+
+        pv = shutil.which("pv")
+        if pv is None:
+            print("Error: Missing dependency 'pv' for transfer of snapshots")
+            print("install e.g. via 'apt install pv'")
+            return 1
+
     if pa.test:
         trace("## TEST ##")
         trace(
@@ -1024,10 +1037,12 @@ def main(argv):
     else:
         operations = Operations(path=pa.path, trace=trace)
 
+    # -- Actions --
+    # 1. Snapshot
     if pa.snap:
         operations.snap(path=pa.snap)
 
-    # remote transfer: host and remote dir are needed
+    # 2. remote transfer: host and remote dir are needed
     if not (pa.remote_host is None and pa.remote_dir is None):
         try:
             transfer(
@@ -1049,7 +1064,7 @@ def main(argv):
         except RuntimeError as e:
             trace(LOG_REMOTE + f"Error while transferring to remote host: {e}")
 
-    # Local sync to another path
+    # 3. Local sync to another path
     if pa.sync_dir is not None:
         try:
             sync_local(operations, pa.sync_dir)
@@ -1058,7 +1073,7 @@ def main(argv):
         except RuntimeError as e:
             trace(LOG_LOCAL + f"ERROR while Syncing local: {e}")
 
-    # cleanup local
+    # 4. Cleanup local
     if pa.target_freespace is not None or pa.target_backups is not None:
         try:
             if pa.keep_backups == DEFAULT_KEEP_BACKUPS:
