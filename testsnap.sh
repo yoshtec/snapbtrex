@@ -109,13 +109,19 @@ test_local_latest(){
 test_local_size(){
   for i in {1..15}
   do
-    head -c 10M </dev/urandom >"$SUBVOLUME/randomfile.file"
+    head -c "${i}M" </dev/urandom >"$SUBVOLUME/randomfile.file"
     test_equal "$?" 0 "Run: $i adding bigger file"
-    ./snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --verbose --target-freespace 30M --keep-backups 1
+    ./snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --verbose --target-freespace 15M --keep-backups 1
     test_equal "$?" 0 "Run: $i Snapshot"
-    df "./$LMNT/"
+    show_size "./$LMNT/"
     sleep 1
   done
+}
+
+show_size() {
+    df -h "$1"
+    btrfs filesystem df "$1"
+    python3 -c "import os; x=os.statvfs('$1'); print(x); print('size =' ,x.f_bsize*x.f_blocks, round(x.f_bsize*x.f_blocks/(1024**2),2) ); print('free =', x.f_bsize*x.f_bfree, round(x.f_bsize*x.f_bfree/(1024**2),2) , x.f_bfree/x.f_blocks); print('avail=', x.f_bsize*x.f_bavail, round(x.f_bsize*x.f_bavail/(1024**2),2), x.f_bavail/x.f_blocks);"
 }
 
 ####
@@ -146,7 +152,6 @@ header "Test Size"
 setup_btrfs
 test_local_size
 cleanup_btrfs
-
 
 exit $RESULT
 

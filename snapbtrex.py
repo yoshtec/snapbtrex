@@ -270,11 +270,13 @@ class Operations:
 
     def unsnapx(self, dir):
         self.trace(LOG_LOCAL + f"remove snapshot {dir}")
-        args = ["sudo", "btrfs", "subvolume", "delete", "-c", dir]
+        args = ["sudo", "btrfs", "subvolume", "delete", dir]
         self.check_call(args)
         self.trace(LOG_LOCAL + f"done remove snapshot {dir}")
 
     def freespace(self):
+        # sync filesystem before assessing the free space
+        self.sync(self.path)
         st = os.statvfs(self.path)
         self.trace(
             LOG_LOCAL + f"filesystem info: {st}"
@@ -514,7 +516,7 @@ def cleandir(operations, targets):
                 if was_above_target_freespace or was_above_target_freespace is None:
                     trace(
                         LOG_LOCAL
-                        + f"Satisfied freespace target: {fsp} with {target_fsp}"
+                        + f"Satisfied freespace target={target_fsp}; current free space={fsp}"
                     )
                     was_above_target_freespace = False
                 if do_del is None:
