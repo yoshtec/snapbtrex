@@ -238,7 +238,8 @@ def _sorted_value(dirs):
 
 def freespace(path):
     st = os.statvfs(path)
-    return st.f_bfree * st.f_frsize
+    print(st)
+    return st.f_bfree * st.f_bsize
 
 
 class Operations:
@@ -324,8 +325,7 @@ class Operations:
         args = [
             f"sudo btrfs send -v {os.path.join(self.path, snap)}"
             + f" | pv -brtfL {rate_limit} | "
-            + f"ssh -p {ssh_port} {receiver}"
-            + f" ' sudo btrfs receive {receiver_path} '"
+            + f"ssh -p {ssh_port} {receiver} 'sudo btrfs receive {receiver_path} '"
         ]
         # TODO: breakup the pipe stuff and do it without shell=True, currently it has problems with pipes :(
         self.check_call(args, shell=True)
@@ -340,8 +340,7 @@ class Operations:
         args = [
             f"sudo btrfs send -v -p {os.path.join(self.path, parent_snap)} {os.path.join(self.path, snap)}"
             + f" | pv -brtfL {rate_limit} | "
-            + f"ssh -p {ssh_port} {receiver} "
-            + f"'sudo btrfs receive -v {receiver_path} '"
+            + f"ssh -p {ssh_port} {receiver} 'sudo btrfs receive -v {receiver_path} '"
         ]
         self.check_call(args, shell=True)
         self.trace(LOG_REMOTE + "finished sending snapshot")

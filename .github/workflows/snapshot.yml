@@ -27,8 +27,6 @@ jobs:
           chmod 600 ~/.ssh/authorized_keys
           chmod 700 ~/.ssh
           sudo chmod -c 0755 ~/
-          ls -la ~/.ssh
-          sudo cat /etc/ssh/sshd_config
 
       - name: Test SSH connection to localhost
         run: ssh -vv -i ~/.ssh/id_rsa -o BatchMode=yes -o StrictHostKeyChecking=no $(whoami)@localhost
@@ -36,10 +34,13 @@ jobs:
       - name: Check if help is displayed
         run: ./snapbtrex.py --help
 
-      - name: Check if explanation is displayed
+      - name: Check if safety net works is displayed
         run: ./snapbtrex.py
 
-      - name: run tests
+      - name: check if explanation is given
+        run: ./snapbtrex.py --explain
+
+      - name: run few internal tests
         run: |
           ./snapbtrex.py --test --path . --verbose --target-freespace 1 -S --keep-backups=3
           ./snapbtrex.py --test --path . --verbose --target-freespace 50T -S --keep-backups=3

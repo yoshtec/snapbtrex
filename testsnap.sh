@@ -8,6 +8,10 @@ SNAPSHOT="./$LMNT/.snapshot"
 
 RESULT=0
 
+header() {
+  echo -e "\e[1m\e[44mHEADER: $1 \e[0m"
+}
+
 test_error() {
   # Increase Error count
   RESULT+=1
@@ -106,8 +110,9 @@ test_local_size(){
   for i in {1..15}
   do
     head -c 10M </dev/urandom >"$SUBVOLUME/randomfile.file"
-    ./snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --verbose --target-freespace 50M
-    test_equal "$?" 0 "Run: $i"
+    test_equal "$?" 0 "Run: $i adding bigger file"
+    ./snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --verbose --target-freespace 50M --target-backups 3
+    test_equal "$?" 0 "Run: $i Snapshot"
     df "./$LMNT/"
     sleep 1
   done
@@ -127,14 +132,17 @@ fi
 # in case the last didn't clean all
 cleanup_btrfs
 
+header "Test local Sync"
 setup_btrfs
 test_local_sync
 cleanup_btrfs
 
+header "Test latest"
 setup_btrfs
 test_local_latest
 cleanup_btrfs
 
+header "Test Size"
 setup_btrfs
 test_local_size
 cleanup_btrfs
