@@ -1,0 +1,51 @@
+name: snapbtrex Test
+
+# Run this workflow every time a new commit pushed to your repository
+on: push
+
+jobs:
+  # Set the job key. The key is displayed as the job name
+  # when a job name is not provided
+  snap-test:
+    # Name the Job
+    name: Test Snapshoting and local transfers
+    # Set the type of machine to run on
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checks out a copy of your repository on the ubuntu-latest machine
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install pv dependency
+        run: sudo apt-get install pv
+
+      - name: Setup SSH
+        run: |
+          ssh-keygen -t rsa -b 4096 -N '' -f ~/.ssh/id_rsa
+          cat ~/.ssh/id_rsa.pub | tee -a ~/.ssh/authorized_keys
+          chmod 600 ~/.ssh/authorized_keys
+          chmod 700 ~/.ssh
+          sudo chmod -c 0755 ~/
+
+      - name: Test SSH connection to localhost
+        run: ssh -vv -i ~/.ssh/id_rsa -o BatchMode=yes -o StrictHostKeyChecking=no $(whoami)@localhost
+
+      - name: Check if help is displayed
+        run: ./snapbtrex.py --help
+
+      - name: Check if safety net works is displayed
+        run: ./snapbtrex.py
+
+      - name: check if explanation is given
+        run: ./snapbtrex.py --explain
+
+      - name: run few internal tests
+        run: |
+          ./snapbtrex.py --test --path . --verbose --target-freespace 1 -S --keep-backups=3
+          ./snapbtrex.py --test --path . --verbose --target-freespace 50T -S --keep-backups=3
+          ./snapbtrex.py --test --path . --verbose --max-age 20w --target-backups 4 -S --keep-backups=3
+          ./snapbtrex.py --test --path . --verbose --max-age 20y --target-backups 2 -S --keep-backups=3
+
+      - name: Run snapshot test
+        run: sudo ./testsnap.sh
