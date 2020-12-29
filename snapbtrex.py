@@ -238,8 +238,8 @@ def _sorted_value(dirs):
 
 def freespace(path):
     st = os.statvfs(path)
-    print(st)
-    return st.f_bfree * st.f_bsize
+    print(st)  # https://www.spinics.net/lists/linux-btrfs/msg103660.html
+    return st.f_bavail * st.f_bsize
 
 
 class Operations:
