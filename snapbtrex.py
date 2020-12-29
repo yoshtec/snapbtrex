@@ -236,12 +236,6 @@ def _sorted_value(dirs):
     yield next(iter(candidates.keys()))
 
 
-def freespace(path):
-    st = os.statvfs(path)
-    # print(st)  # https://www.spinics.net/lists/linux-btrfs/msg103660.html
-    return st.f_bavail * st.f_bsize
-
-
 class Operations:
     def __init__(self, path, trace=None):
         self.tracef = trace
@@ -276,12 +270,16 @@ class Operations:
 
     def unsnapx(self, dir):
         self.trace(LOG_LOCAL + f"remove snapshot {dir}")
-        args = ["sudo", "btrfs", "subvolume", "delete", dir]
+        args = ["sudo", "btrfs", "subvolume", "delete", "-c", dir]
         self.check_call(args)
         self.trace(LOG_LOCAL + f"done remove snapshot {dir}")
 
     def freespace(self):
-        return freespace(self.path)
+        st = os.statvfs(self.path)
+        self.trace(
+            LOG_LOCAL + f"filesystem info: {st}"
+        )  # https://www.spinics.net/lists/linux-btrfs/msg103660.html
+        return st.f_bavail * st.f_bsize
 
     def listdir(self):
         return [d for d in os.listdir(self.path) if timef(d)]
