@@ -250,10 +250,15 @@ class Operations:
             args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=shell
         )
         stdout, stderr = p.communicate()
-        if stdout:
-            self.trace(LOG_OUTPUT + stdout.decode("utf-8"))
+
         if stderr:
-            self.trace(LOG_STDERR + stderr.decode("utf-8"))
+            stderr = stderr.decode(encoding=sys.stderr.encoding, errors="ignore")
+            self.trace(LOG_STDERR + stderr)
+
+        if stdout:
+            stdout = stdout.decode(encoding=sys.stdout.encoding, errors="ignore")
+            self.trace(LOG_OUTPUT + stdout)
+
         if p.returncode != 0:
             raise RuntimeError(f"failed {cmd_str}")
         return stdout  # return the content
