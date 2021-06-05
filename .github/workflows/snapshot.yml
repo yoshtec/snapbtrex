@@ -1,4 +1,4 @@
-name: snapbtrex Test
+name: snapbtrex Test build and publish
 
 # Run this workflow every time a new commit pushed to your repository
 on: push
@@ -32,20 +32,60 @@ jobs:
         run: ssh -vv -i ~/.ssh/id_rsa -o BatchMode=yes -o StrictHostKeyChecking=no $(whoami)@localhost
 
       - name: Check if help is displayed
-        run: ./snapbtrex.py --help
+        run: ./snapbtrex/snapbtrex.py --help
 
       - name: Check if safety net works is displayed
-        run: ./snapbtrex.py
+        run: ./snapbtrex/snapbtrex.py
 
       - name: check if explanation is given
-        run: ./snapbtrex.py --explain
+        run: ./snapbtrex/snapbtrex.py --explain
 
       - name: run few internal tests
         run: |
-          ./snapbtrex.py --test --path . --verbose --target-freespace 1 -S --keep-backups=3
-          ./snapbtrex.py --test --path . --verbose --target-freespace 50T -S --keep-backups=3
-          ./snapbtrex.py --test --path . --verbose --max-age 20w --target-backups 4 -S --keep-backups=3
-          ./snapbtrex.py --test --path . --verbose --max-age 20y --target-backups 2 -S --keep-backups=3
+          ./snapbtrex/snapbtrex.py --test --path . --verbose --target-freespace 1 -S --keep-backups=3
+          ./snapbtrex/snapbtrex.py --test --path . --verbose --target-freespace 50T -S --keep-backups=3
+          ./snapbtrex/snapbtrex.py --test --path . --verbose --max-age 20w --target-backups 4 -S --keep-backups=3
+          ./snapbtrex/snapbtrex.py --test --path . --verbose --max-age 20y --target-backups 2 -S --keep-backups=3
 
       - name: Run snapshot test
         run: sudo ./testsnap.sh
+
+  snapbtrex-build-and-publish:
+    # Name the Job
+    name: Build snapbtrex and publish
+    # Set the type of machine to run on
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup python
+        uses: actions/setup-python@v2
+
+      - name: Install build and test dependencies
+        run: python -m pip install --user --upgrade setuptools wheel pytest pytest-cov
+
+      #- name: Run python tests
+      #  run: python -m pytest
+
+      - name: Build
+        run: python setup.py sdist bdist_wheel
+
+      - name: Publish package to TestPyPI
+        uses: pypa/gh-action-pypi-publish@master
+        with:
+          user: __token__
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          repository_url: https://test.pypi.org/legacy/
+          skip_existing: true
+
+      - name: Test install
+        run: python -m pip install --user --upgrade -i https://test.pypi.org/simple/ snapbtrex
+
+      - name: Publish package
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+        uses: pypa/gh-action-pypi-publish@master
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}

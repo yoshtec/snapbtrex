@@ -60,7 +60,7 @@ cleanup_btrfs (){
 test_local_sync(){
   for i in {1..20}
   do
-    ./snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --target-backups 10 --verbose --sync-target "./$LMNT/.sync/" --sync-keep 5
+    ./snapbtrex/snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --target-backups 10 --verbose --sync-target "./$LMNT/.sync/" --sync-keep 5
     test_equal "$?" 0 "Run: $i"
     sleep 1
   done
@@ -77,7 +77,7 @@ test_local_sync(){
 test_local_latest(){
   for i in {1..5}
   do
-    ./snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --target-backups 10 --keep-only-latest --verbose
+    ./snapbtrex/snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --target-backups 10 --keep-only-latest --verbose
     test_equal "$?" 0 "Run: $i"
     sleep 1
   done
@@ -89,7 +89,7 @@ test_local_latest(){
 
   for i in {1..10}
   do
-    ./snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --target-backups 10 --keep-only-latest --verbose
+    ./snapbtrex/snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --target-backups 10 --keep-only-latest --verbose
     test_equal "$?" 0 "Run: $i"
     sleep 1
   done
@@ -111,7 +111,7 @@ test_local_size(){
   do
     head -c "${i}M" </dev/urandom >"$SUBVOLUME/randomfile.file"
     test_equal "$?" 0 "Run: $i adding bigger file"
-    ./snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --verbose --target-freespace 15M --keep-backups 1
+    ./snapbtrex/snapbtrex.py --path "$SNAPSHOT" --snap "$SUBVOLUME" --verbose --target-freespace 15M --keep-backups 1
     test_equal "$?" 0 "Run: $i Snapshot"
     show_size "./$LMNT/"
     sleep 1
