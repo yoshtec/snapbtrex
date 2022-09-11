@@ -158,7 +158,7 @@ TIME_SCALE = math.ceil(float((2**32) / math.log(2**32)))
 def timef(x):
     # make value inverse exponential in the time passed
     try:
-        v = math.exp(_timestamp(x) / TIME_SCALE)
+        v = math.exp(timestamp(x) / TIME_SCALE)
     except ZeroDivisionError:
         v = None
     return v
@@ -166,14 +166,10 @@ def timef(x):
 
 def timestamp(x):
     try:
-        v = _timestamp(x)
+        v = time.mktime(time.strptime(os.path.split(x)[1], DATE_FORMAT))
     except ValueError:
         v = None
     return v
-
-
-def _timestamp(x):
-    return time.mktime(time.strptime(os.path.split(x)[1], DATE_FORMAT))
 
 
 def sorted_age(dirs, max_age):
