@@ -71,7 +71,7 @@ so, new pairs will have high value, even if they are tightly packed,
 while older pairs will have high value if they are far apart.
 
 The mechanism is completely self-contained and you can delete any
-snapshot manually or any files in the snapshots.
+snapshot manually.
 
 
 == Transferring Snapshots to Remote Host
@@ -152,7 +152,7 @@ LOG_STDERR = "STDERR > "
 LOG_OUTPUT = "OUTPUT > "
 
 # find TIME_SCALE: t < 2**32 => e**(t/c) < 2**32
-TIME_SCALE = math.ceil(float((2 ** 32) / math.log(2 ** 32)))
+TIME_SCALE = math.ceil(float((2**32) / math.log(2**32)))
 
 
 def timef(x):
@@ -229,7 +229,7 @@ def _sorted_value(dirs):
         # Select the least important one
         mdiff, mfrm, mto = min(diffs)
 
-        del candidates[mto]  # That's not a candidate any longer, it's gonna go
+        del candidates[mto]  # That's not a candidate any longer, it's got to go
         yield mto
 
     # also, we must delete the last entry
@@ -318,9 +318,8 @@ class Operations:
         return time.strftime(DATE_FORMAT, time.gmtime(secs))
 
     def trace(self, *args, **kwargs):
-        f = self.tracef
-        if f:
-            f(*args, **kwargs)
+        if self.tracef:
+            self.tracef(*args, **kwargs)
 
     def send_single(self, snap, receiver, receiver_path, ssh_port, rate_limit):
         self.trace(
@@ -474,7 +473,7 @@ class FakeOperations(DryOperations):
 
 
 def cleandir(operations, targets):
-    """ Perform actual cleanup of using 'operations' until 'targets' are met """
+    """Perform actual cleanup of using 'operations' until 'targets' are met"""
 
     trace = operations.trace
     keep_backups = targets.keep_backups
@@ -552,7 +551,7 @@ def cleandir(operations, targets):
         next_del = None
         if max_age is not None:
             next_del = first(sorted_age(dirs, max_age))
-        # remove latest first only if the keep_latest is 'True'
+        # remove the latest first only if the keep_latest is 'True'
         if keep_latest is not None and keep_latest:
             next_del = first(dirs)
         if next_del is None:
@@ -567,7 +566,7 @@ def cleandir(operations, targets):
 
 
 def transfer(operations, target_host, target_dir, link_dir, ssh_port, rate_limit):
-    """ Transfer snapshots to remote host """
+    """Transfer snapshots to remote host"""
 
     trace = operations.trace
 
@@ -609,7 +608,7 @@ def transfer(operations, target_host, target_dir, link_dir, ssh_port, rate_limit
 
 
 def remotecleandir(operations, target_host, target_dir, remote_keep, ssh_port):
-    """ Perform remote cleanup using 'operations' until exactly remote_keep backups are left """
+    """Perform remote cleanup using 'operations' until exactly remote_keep backups are left"""
     trace = operations.trace
 
     if remote_keep is not None:
@@ -642,7 +641,7 @@ def remotecleandir(operations, target_host, target_dir, remote_keep, ssh_port):
 
 
 def sync_local(operations, sync_dir):
-    """ Transfer snapshots to local target """
+    """Transfer snapshots to local target"""
     trace = operations.trace
 
     # find out what kind of snapshots exist on the remote host
@@ -678,7 +677,7 @@ def sync_local(operations, sync_dir):
 
 
 def sync_cleandir(operations, target_dir, sync_keep):
-    """ Perform local sync cleanup using 'operations' until exactly sync_keep backups are left """
+    """Perform local sync cleanup using 'operations' until exactly sync_keep backups are left"""
     trace = operations.trace
 
     if sync_keep is not None:
@@ -707,18 +706,18 @@ def sync_cleandir(operations, target_dir, sync_keep):
 
 def log_trace(fmt, *args, **kwargs):
     tt = time.strftime(DATE_FORMAT, time.gmtime(None)) + ": "
-    if args is not None:
+    if args:
         print(tt + (fmt % args))
-    elif kwargs is not None:
+    elif kwargs:
         print(tt + (fmt % kwargs))
     else:
         print(tt + fmt)
 
 
 def default_trace(fmt, *args, **kwargs):
-    if args is not None:
+    if args:
         print(fmt % args)
-    elif kwargs is not None:
+    elif kwargs:
         print(fmt % kwargs)
     else:
         print(fmt)
