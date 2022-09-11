@@ -1,6 +1,6 @@
 import setuptools
 
-VERSION = "2.0.2"
+VERSION = "2.0.4"
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
@@ -18,6 +18,7 @@ setuptools.setup(
     entry_points={
         "console_scripts": [
             "snapbtrex = snapbtrex:main",
+            "snapbtrex.py = snapbtrex:main",
         ]
     },
     packages=setuptools.find_packages(),
