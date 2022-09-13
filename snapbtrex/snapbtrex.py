@@ -701,21 +701,27 @@ def sync_cleandir(operations, target_dir, sync_keep):
 
 
 def log_trace(fmt, *args, **kwargs):
-    tt = time.strftime(DATE_FORMAT, time.gmtime(None)) + ": "
-    if args:
-        print(tt + (fmt % args))
-    elif kwargs:
-        print(tt + (fmt % kwargs))
-    else:
+    try:
+        tt = time.strftime(DATE_FORMAT, time.gmtime(None)) + ": "
+        if args:
+            print(tt + (fmt % args))
+        elif kwargs:
+            print(tt + (fmt % kwargs))
+        else:
+            print(tt + fmt)
+    except (Exception,):
         print(tt + fmt)
 
 
 def default_trace(fmt, *args, **kwargs):
-    if args:
-        print(fmt % args)
-    elif kwargs:
-        print(fmt % kwargs)
-    else:
+    try:
+        if args:
+            print(fmt % args)
+        elif kwargs:
+            print(fmt % kwargs)
+        else:
+            print(fmt)
+    except (Exception,):
         print(fmt)
 
 
