@@ -261,27 +261,26 @@ class Operations:
 
     def sync(self, dir):
         # syncing to be sure the operation is on the disc
-        self.trace(LOG_LOCAL + f"sync filesystem {dir}")
+        self.trace(f"{LOG_LOCAL} sync filesystem {dir}")
         args = ["sudo", "btrfs", "filesystem", "sync", dir]
         self.check_call(args)
-        self.trace(LOG_LOCAL + f"done sync filesystem {dir}")
+        self.trace(f"{LOG_LOCAL} done sync filesystem {dir}")
 
     def unsnap(self, dir):
         self.unsnapx(os.path.join(self.path, dir))
 
     def unsnapx(self, dir):
-        self.trace(LOG_LOCAL + f"remove snapshot {dir}")
+        self.trace(f"{LOG_LOCAL} remove snapshot {dir}")
         args = ["sudo", "btrfs", "subvolume", "delete", dir]
         self.check_call(args)
-        self.trace(LOG_LOCAL + f"done remove snapshot {dir}")
+        self.trace(f"{LOG_LOCAL} done remove snapshot {dir}")
 
     def freespace(self):
         # sync filesystem before assessing the free space
         self.sync(self.path)
         st = os.statvfs(self.path)
-        self.trace(
-            LOG_LOCAL + f"filesystem info: {st}"
-        )  # https://www.spinics.net/lists/linux-btrfs/msg103660.html
+        self.trace(f"{LOG_LOCAL} filesystem info: {st}")
+        # https://www.spinics.net/lists/linux-btrfs/msg103660.html
         return st.f_bavail * st.f_bsize
 
     def listdir(self):
@@ -292,9 +291,9 @@ class Operations:
 
     def listremote_dir(self, receiver, receiver_path, ssh_port):
         self.trace(
-            LOG_REMOTE + f"list remote files host={receiver}, dir={receiver_path}"
+            f"{LOG_REMOTE} list remote files host={receiver}, dir={receiver_path}"
         )
-        args = ["ssh", "-p", ssh_port, receiver, "ls -1 " + receiver_path]
+        args = ["ssh", "-p", ssh_port, receiver, f"ls -1 {receiver_path}"]
         return [
             d for d in self.check_call(args, dry_safe=True).splitlines() if timef(d)
         ]
@@ -302,7 +301,7 @@ class Operations:
     def snap(self, path):
         # yt: changed to readonly snapshots
         newdir = os.path.join(self.path, self.datestamp())
-        self.trace(LOG_LOCAL + f"snapshotting path={path} to newdir={newdir}")
+        self.trace(f"{LOG_LOCAL} snapshotting path={path} to newdir={newdir}")
         args = ["sudo", "btrfs", "subvolume", "snapshot", "-r", path, newdir]
         self.check_call(args)
         self.sync(self.path)  # yt: make sure the new snap is on the disk
@@ -319,13 +318,12 @@ class Operations:
 
     def send_single(self, snap, receiver, receiver_path, ssh_port, rate_limit):
         self.trace(
-            LOG_REMOTE
-            + f"send single snapshot from {snap} to host {receiver} path={receiver_path}"
+            f"{LOG_REMOTE} send single snapshot={snap} from path={self.path} to host={receiver} path={receiver_path}"
         )
         args = [
-            f"sudo btrfs send -v {os.path.join(self.path, snap)}"
-            + f" | pv -brtfL {rate_limit} | "
-            + f"ssh -p {ssh_port} {receiver} 'sudo btrfs receive {receiver_path} '"
+            f"sudo btrfs send {os.path.join(self.path, snap)}"
+            f" | pv -brtfL {rate_limit} | "
+            f"ssh -p {ssh_port} {receiver} 'sudo btrfs receive {receiver_path} '"
         ]
         # TODO: breakup the pipe stuff and do it without shell=True, currently it has problems with pipes :(
         self.check_call(args, shell=True)
@@ -334,21 +332,20 @@ class Operations:
         self, parent_snap, snap, receiver, receiver_path, ssh_port, rate_limit
     ):
         self.trace(
-            LOG_REMOTE
-            + f"send snapshot from {snap} with parent {parent_snap} to host {receiver} path={receiver_path}"
+            f"{LOG_REMOTE} send snapshot={snap} from path={self.path} with parent={parent_snap} "
+            f"to host={receiver} path={receiver_path}"
         )
         args = [
-            f"sudo btrfs send -v -p {os.path.join(self.path, parent_snap)} {os.path.join(self.path, snap)}"
-            + f" | pv -brtfL {rate_limit} | "
-            + f"ssh -p {ssh_port} {receiver} 'sudo btrfs receive -v {receiver_path} '"
+            f"sudo btrfs send -p {os.path.join(self.path, parent_snap)} {os.path.join(self.path, snap)}"
+            f" | pv -brtfL {rate_limit} | "
+            f"ssh -p {ssh_port} {receiver} 'sudo btrfs receive {receiver_path} '"
         ]
         self.check_call(args, shell=True)
         self.trace(LOG_REMOTE + "finished sending snapshot")
 
     def link_current(self, receiver, receiver_path, snap, link_target, ssh_port):
         self.trace(
-            LOG_REMOTE
-            + f"linking current snapshot host={receiver} path={receiver_path} snap={snap} link={link_target}"
+            f"{LOG_REMOTE} linking current snapshot host={receiver} path={receiver_path} snap={snap} link={link_target}"
         )
         args = [
             "ssh",
@@ -361,8 +358,7 @@ class Operations:
 
     def remote_unsnap(self, receiver, receiver_path, dir, ssh_port):
         self.trace(
-            LOG_REMOTE
-            + f"delete snapshot {dir} from host={receiver} path={receiver_path}"
+            f"{LOG_REMOTE} delete snapshot {dir} from host={receiver} path={receiver_path}"
         )
         args = [
             "ssh",
@@ -375,18 +371,17 @@ class Operations:
         self.trace(LOG_REMOTE + "deleted")
 
     def sync_single(self, snap, target):
-        self.trace(LOG_LOCAL + "sync single snapshot %s to %s", snap, target)
+        self.trace(f"{LOG_LOCAL} sync single snapshot={snap} to={target}")
         args = [
-            f"sudo btrfs send -v {os.path.join(self.path, snap)}"
-            + " | pv -brtf | "
-            + f"sudo btrfs receive -v {target}"
+            f"sudo btrfs send {os.path.join(self.path, snap)}"
+            f" | pv -brtf | "
+            f"sudo btrfs receive {target}"
         ]
         self.check_call(args, shell=True)
 
     def sync_withparent(self, parent_snap, snap, target_path):
         self.trace(
-            LOG_LOCAL
-            + f"send snapshot from {snap} with parent {parent_snap} to path={target_path}"
+            f"{LOG_LOCAL} send snapshot={snap} from={self.path} with parent={parent_snap} to path={target_path}"
         )
         args = [
             f"sudo btrfs send -v -p {os.path.join(self.path, parent_snap)} {os.path.join(self.path, snap)}"
@@ -482,8 +477,7 @@ def cleandir(operations, targets):
     last_dirs = []
 
     trace(
-        LOG_LOCAL
-        + f"Parameters for cleandir: keep_backups={keep_backups}, target_freespace={target_fsp}, "
+        f"{LOG_LOCAL} Parameters for cleandir: keep_backups={keep_backups}, target_freespace={target_fsp}, "
         f"target_backups={target_backups}, max_age={max_age}, keep_latest={keep_latest}"
     )
     next_del = None
@@ -710,7 +704,7 @@ def log_trace(fmt, *args, **kwargs):
         else:
             print(tt + fmt)
     except (Exception,):
-        print(tt + fmt)
+        print(fmt)
 
 
 def default_trace(fmt, *args, **kwargs):
@@ -1077,22 +1071,21 @@ def main(argv):
             if pa.sync_keep is not None:
                 sync_cleandir(operations, pa.sync_dir, pa.sync_keep)
         except RuntimeError as e:
-            trace(LOG_LOCAL + f"ERROR while Syncing local: {e}")
+            trace(f"{LOG_LOCAL} ERROR while Syncing local: {e}")
 
     # 4. Cleanup local
     if pa.target_freespace is not None or pa.target_backups is not None:
         try:
             if pa.keep_backups == DEFAULT_KEEP_BACKUPS:
                 trace(
-                    LOG_LOCAL
-                    + f"using default value for --keep-backups: {DEFAULT_KEEP_BACKUPS}"
+                    f"{LOG_LOCAL} using default value for --keep-backups: {DEFAULT_KEEP_BACKUPS}"
                 )
             cleandir(operations=operations, targets=pa)
         except RuntimeError as e:
-            trace(LOG_LOCAL + f"ERROR while cleaning up: {e}")
+            trace(f"{LOG_LOCAL} ERROR while cleaning up: {e}")
     else:
         trace(
-            LOG_LOCAL + "no options for cleaning were passed -> keeping all snapshots"
+            f"{LOG_LOCAL} no options for cleaning were passed -> keeping all snapshots"
         )
 
 
