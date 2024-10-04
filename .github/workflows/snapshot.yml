@@ -32,7 +32,7 @@ jobs:
         run: ssh -vv -i ~/.ssh/id_rsa -o BatchMode=yes -o StrictHostKeyChecking=no $(whoami)@localhost
 
       - name: Install local Package
-        run: python3 -m pip install ./snapbtrex
+        run: python3 -m pip install .
 
       - name: Check if help is displayed
         run: snapbtrex --help
