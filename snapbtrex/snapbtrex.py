@@ -42,7 +42,7 @@
 snapbtrex is a small utility that keeps snapshots of btrfs filesystems
 and optionally send it to a remote system.
 
-snapbtrex is hosted on github:
+snapbtrex is hosted on GitHub:
 https://github.com/yoshtec/snapbtrex
 
 You can run it regularly (for example in a small script in
@@ -70,7 +70,7 @@ The scoring mechanism integrates e^x from (now-newer) to (now-older)
 so, new pairs will have high value, even if they are tightly packed,
 while older pairs will have high value if they are far apart.
 
-The mechanism is completely self-contained and you can delete any
+The mechanism is completely self-contained, and you can delete any
 snapshot manually.
 
 
@@ -316,9 +316,15 @@ class Operations:
         if self.tracef:
             self.tracef(*args, **kwargs)
 
+    def log_local(self, message: str):
+        self.trace(LOG_LOCAL + message)
+
+    def log_remote(self, message: str):
+        self.trace(LOG_REMOTE + message)
+
     def send_single(self, snap, receiver, receiver_path, ssh_port, rate_limit):
-        self.trace(
-            f"{LOG_REMOTE} send single snapshot={snap} from path={self.path} to host={receiver} path={receiver_path}"
+        self.log_remote(
+            f"send single snapshot={snap} from path={self.path} to host={receiver} path={receiver_path}"
         )
         args = [
             f"sudo btrfs send {os.path.join(self.path, snap)}"
@@ -331,8 +337,8 @@ class Operations:
     def send_withparent(
         self, parent_snap, snap, receiver, receiver_path, ssh_port, rate_limit
     ):
-        self.trace(
-            f"{LOG_REMOTE} send snapshot={snap} from path={self.path} with parent={parent_snap} "
+        self.log_remote(
+            f"send snapshot={snap} from path={self.path} with parent={parent_snap}"
             f"to host={receiver} path={receiver_path}"
         )
         args = [
@@ -341,11 +347,11 @@ class Operations:
             f"ssh -p {ssh_port} {receiver} 'sudo btrfs receive {receiver_path} '"
         ]
         self.check_call(args, shell=True)
-        self.trace(LOG_REMOTE + "finished sending snapshot")
+        self.log_remote("finished sending snapshot")
 
     def link_current(self, receiver, receiver_path, snap, link_target, ssh_port):
-        self.trace(
-            f"{LOG_REMOTE} linking current snapshot host={receiver} path={receiver_path} snap={snap} link={link_target}"
+        self.log_remote(
+            f"linking current snapshot host={receiver} path={receiver_path} snap={snap} link={link_target}"
         )
         args = [
             "ssh",
@@ -357,8 +363,8 @@ class Operations:
         self.check_call(args)
 
     def remote_unsnap(self, receiver, receiver_path, dir, ssh_port):
-        self.trace(
-            f"{LOG_REMOTE} delete snapshot {dir} from host={receiver} path={receiver_path}"
+        self.log_remote(
+            f"delete snapshot {dir} from host={receiver} path={receiver_path}"
         )
         args = [
             "ssh",
@@ -371,7 +377,7 @@ class Operations:
         self.trace(LOG_REMOTE + "deleted")
 
     def sync_single(self, snap, target):
-        self.trace(f"{LOG_LOCAL} sync single snapshot={snap} to={target}")
+        self.log_local(f"sync single snapshot={snap} to={target}")
         args = [
             f"sudo btrfs send {os.path.join(self.path, snap)}"
             f" | pv -brtf | "
@@ -380,8 +386,8 @@ class Operations:
         self.check_call(args, shell=True)
 
     def sync_withparent(self, parent_snap, snap, target_path):
-        self.trace(
-            f"{LOG_LOCAL} send snapshot={snap} from={self.path} with parent={parent_snap} to path={target_path}"
+        self.log_local(
+            f"send snapshot={snap} from={self.path} with parent={parent_snap} to path={target_path}"
         )
         args = [
             f"sudo btrfs send -v -p {os.path.join(self.path, parent_snap)} {os.path.join(self.path, snap)}"
@@ -389,6 +395,219 @@ class Operations:
             f"sudo btrfs receive -v {target_path}"
         ]
         self.check_call(args, shell=True)
+
+    def cleandir(self, targets):
+        """Perform actual cleanup of using 'operations' until 'targets' are met"""
+
+        keep_backups = targets.keep_backups
+        keep_latest = targets.keep_latest
+        target_fsp = targets.target_freespace
+        target_backups = targets.target_backups
+        max_age = targets.max_age
+        was_above_target_freespace = None
+        was_above_target_backups = None
+        last_dirs = []
+
+        self.log_local(
+            f"Parameters for clean dir: keep_backups={keep_backups}, target_freespace={target_fsp}, "
+            f"target_backups={target_backups}, max_age={max_age}, keep_latest={keep_latest}"
+        )
+        next_del = None
+
+        while True:
+            do_del = None
+            dirs = sorted(self.listdir())
+            dirs_len = len(dirs)
+            if dirs_len <= 0:
+                raise Exception("No more directories to clean")
+            elif dirs == last_dirs:
+                raise Exception(f"Could not delete last snapshot: {next_del}")
+            else:
+                last_dirs = dirs
+
+            # check at least keep this amount of backups
+            if keep_backups is not None:
+                if dirs_len <= keep_backups:
+                    self.log_local(
+                        f"current amount of backups: {dirs_len} have to keep a minimum of {keep_backups}, "
+                        f"stopping further deletion"
+                    )
+                    break
+
+            if target_fsp is not None:
+                fsp = self.freespace()
+                # print "+++ ", fsp, target_fsp, fsp >= target_fsp
+                if fsp >= target_fsp:
+                    if was_above_target_freespace or was_above_target_freespace is None:
+                        self.log_local(
+                            f"Satisfied freespace target={target_fsp}; current free space={fsp}"
+                        )
+                        was_above_target_freespace = False
+                    if do_del is None:
+                        do_del = False
+                else:
+                    if was_above_target_freespace is None:
+                        was_above_target_freespace = True
+                    do_del = True
+
+            if target_backups is not None:
+                if dirs_len <= target_backups:
+                    if was_above_target_backups or was_above_target_backups is None:
+                        self.log_local(
+                            f"Satisfied target number of backups: {target_backups} with {dirs_len}"
+                        )
+                        was_above_target_backups = False
+                    if do_del is None:
+                        do_del = False
+                else:
+                    if was_above_target_backups is None:
+                        was_above_target_backups = True
+                    do_del = True
+
+            if not do_del:
+                break
+
+            next_del = None
+            if max_age is not None:
+                next_del = first(sorted_age(dirs, max_age))
+            # remove the latest first only if the keep_latest is 'True'
+            if keep_latest is not None and keep_latest:
+                next_del = first(dirs)
+            if next_del is None:
+                next_del = first(sorted_value(dirs))
+            else:
+                self.log_local(f"will delete backup: '{self.datestamp(max_age)}'")
+            if next_del is None:
+                self.log_local("No more backups left")
+                break
+            else:
+                self.unsnap(next_del)
+
+    def transfer(self, target_host, target_dir, link_dir, ssh_port, rate_limit):
+        """Transfer snapshots to remote host"""
+
+        # find out what kind of snapshots exist on the remote host
+        targetsnaps = set(self.listremote_dir(target_host, target_dir, ssh_port))
+        localsnaps = set(self.listdir())
+
+        if len(localsnaps) == 0:
+            # nothing to do here, no snaps here
+            return
+
+        parents = targetsnaps.intersection(localsnaps)
+
+        # no parent exists so
+        if len(parents) == 0:
+            # start transferring the oldest snapshot
+            # by that snapbtrex will transfer all snapshots that have been created
+            self.send_single(
+                min(localsnaps), target_host, target_dir, ssh_port, rate_limit
+            )
+            parents.add(min(localsnaps))
+
+        # parent existing, use the latest as parent
+        max_parent = max(parents)
+        parent = max_parent
+
+        self.log_remote(f"last possible parent = {max_parent}")
+
+        for s in sorted(localsnaps):
+            if s > max_parent:
+                self.log_remote(f"transfer: parent={parent} snap={s}")
+                self.send_withparent(
+                    parent, s, target_host, target_dir, ssh_port, rate_limit
+                )
+                if link_dir is not None:
+                    self.link_current(target_host, target_dir, s, link_dir, ssh_port)
+                # advance one step
+                parent = s
+
+    def remotecleandir(self, target_host, target_dir, remote_keep, ssh_port):
+        """Perform remote cleanup using 'operations' until exactly remote_keep backups are left"""
+
+        if remote_keep is not None:
+            dirs = sorted(
+                self.listremote_dir(
+                    receiver=target_host, receiver_path=target_dir, ssh_port=ssh_port
+                )
+            )
+            dirs_len = len(dirs)
+            if dirs_len <= remote_keep or remote_keep <= 0:
+                self.log_remote(
+                    "No remote directories to clean, currently %s remote backups, should keep %s".format(
+                        dirs_len, remote_keep
+                    )
+                )
+            else:
+                delete_dirs = sorted_value(dirs)
+                del_count = dirs_len - remote_keep
+                self.log_remote(
+                    f"about to remove {del_count} of out of {dirs_len} backups, keeping {remote_keep}"
+                )
+                for del_dir in itertools.islice(delete_dirs, del_count):
+                    if del_dir is None:
+                        self.log_remote("No more backups left")
+                        break
+                    else:
+                        self.remote_unsnap(target_host, target_dir, del_dir, ssh_port)
+
+    def sync_local(self, sync_dir):
+        """Transfer snapshots to local target"""
+
+        # find out what kind of snapshots exist on the remote host
+        targetsnaps = set(self.listdir_path(sync_dir))
+        localsnaps = set(self.listdir())
+
+        if len(localsnaps) == 0:
+            # nothing to do here, no snaps here
+            return
+
+        parents = targetsnaps.intersection(localsnaps)
+
+        # no parent exists so
+        if len(parents) == 0:
+            # start transferring the oldest snapshot
+            # by that snapbtrex will transfer all snapshots that have been created
+            self.sync_single(min(localsnaps), sync_dir)
+            parents.add(min(localsnaps))
+
+        # parent existing, use the latest as parent
+        max_parent = max(parents)
+        parent = max_parent
+
+        self.log_local(f"Sync: last possible parent = {max_parent}")
+
+        for s in sorted(localsnaps):
+            if s > max_parent:
+                self.log_local(f"transfer: parent={parent} snap={s}")
+                self.sync_withparent(parent, s, sync_dir)
+                # if link_dir is not None:
+                #    operations.link_current(target_host, target_dir, s, link_dir, ssh_port)
+                parent = s
+
+    def sync_cleandir(self, target_dir, sync_keep):
+        """Perform local sync cleanup using 'operations' until exactly sync_keep backups are left"""
+
+        if sync_keep is not None:
+            dirs = sorted(self.listdir_path(target_dir))
+            dirs_len = len(dirs)
+            if dirs_len <= sync_keep or sync_keep <= 0:
+                self.log_local(
+                    f"No synced directories to clean, currently {dirs_len} synced backups, should keep {sync_keep}"
+                )
+            else:
+                delete_dirs = sorted_value(dirs)
+                del_count = dirs_len - sync_keep
+                self.log_local(
+                    f"about to remove sync {del_count} of out of {dirs_len} synced backups, keeping {sync_keep}"
+                )
+                for del_dir in itertools.islice(delete_dirs, del_count):
+                    self.log_local("removing: ")
+                    if del_dir is None:
+                        self.log_local("No more synced backups left")
+                        break
+                    else:
+                        self.unsnapx(os.path.join(target_dir, del_dir))
 
 
 # Allows to Simulate operations
@@ -461,633 +680,3 @@ class FakeOperations(DryOperations):
     def freespace(self):
         self.trace(f"freespace() = {self.space}")
         return self.space
-
-
-def cleandir(operations, targets):
-    """Perform actual cleanup of using 'operations' until 'targets' are met"""
-
-    trace = operations.trace
-    keep_backups = targets.keep_backups
-    keep_latest = targets.keep_latest
-    target_fsp = targets.target_freespace
-    target_backups = targets.target_backups
-    max_age = targets.max_age
-    was_above_target_freespace = None
-    was_above_target_backups = None
-    last_dirs = []
-
-    trace(
-        f"{LOG_LOCAL} Parameters for cleandir: keep_backups={keep_backups}, target_freespace={target_fsp}, "
-        f"target_backups={target_backups}, max_age={max_age}, keep_latest={keep_latest}"
-    )
-    next_del = None
-
-    while True:
-        do_del = None
-        dirs = sorted(operations.listdir())
-        dirs_len = len(dirs)
-        if dirs_len <= 0:
-            raise Exception("No more directories to clean")
-        elif dirs == last_dirs:
-            raise Exception(f"Could not delete last snapshot: {next_del}")
-        else:
-            last_dirs = dirs
-
-        # check at least keep this amount of backups
-        if keep_backups is not None:
-            if dirs_len <= keep_backups:
-                trace(
-                    LOG_LOCAL
-                    + f"current amount of backups: {dirs_len} have to keep a minimum of {keep_backups},"
-                    f" stopping further deletion"
-                )
-                break
-
-        if target_fsp is not None:
-            fsp = operations.freespace()
-            # print "+++ ", fsp, target_fsp, fsp >= target_fsp
-            if fsp >= target_fsp:
-                if was_above_target_freespace or was_above_target_freespace is None:
-                    trace(
-                        LOG_LOCAL
-                        + f"Satisfied freespace target={target_fsp}; current free space={fsp}"
-                    )
-                    was_above_target_freespace = False
-                if do_del is None:
-                    do_del = False
-            else:
-                if was_above_target_freespace is None:
-                    was_above_target_freespace = True
-                do_del = True
-
-        if target_backups is not None:
-            if dirs_len <= target_backups:
-                if was_above_target_backups or was_above_target_backups is None:
-                    trace(
-                        LOG_LOCAL
-                        + f"Satisfied target number of backups: {target_backups} with {dirs_len}"
-                    )
-                    was_above_target_backups = False
-                if do_del is None:
-                    do_del = False
-            else:
-                if was_above_target_backups is None:
-                    was_above_target_backups = True
-                do_del = True
-
-        if not do_del:
-            break
-
-        next_del = None
-        if max_age is not None:
-            next_del = first(sorted_age(dirs, max_age))
-        # remove the latest first only if the keep_latest is 'True'
-        if keep_latest is not None and keep_latest:
-            next_del = first(dirs)
-        if next_del is None:
-            next_del = first(sorted_value(dirs))
-        else:
-            trace(LOG_LOCAL + "will delete backup: '%s'", operations.datestamp(max_age))
-        if next_del is None:
-            trace(LOG_LOCAL + "No more backups left")
-            break
-        else:
-            operations.unsnap(next_del)
-
-
-def transfer(operations, target_host, target_dir, link_dir, ssh_port, rate_limit):
-    """Transfer snapshots to remote host"""
-
-    trace = operations.trace
-
-    # find out what kind of snapshots exist on the remote host
-    targetsnaps = set(operations.listremote_dir(target_host, target_dir, ssh_port))
-    localsnaps = set(operations.listdir())
-
-    if len(localsnaps) == 0:
-        # nothing to do here, no snaps here
-        return
-
-    parents = targetsnaps.intersection(localsnaps)
-
-    # no parent exists so
-    if len(parents) == 0:
-        # start transferring the oldest snapshot
-        # by that snapbtrex will transfer all snapshots that have been created
-        operations.send_single(
-            min(localsnaps), target_host, target_dir, ssh_port, rate_limit
-        )
-        parents.add(min(localsnaps))
-
-    # parent existing, use the latest as parent
-    max_parent = max(parents)
-    parent = max_parent
-
-    trace(LOG_REMOTE + f"last possible parent = {max_parent}")
-
-    for s in sorted(localsnaps):
-        if s > max_parent:
-            trace(LOG_REMOTE + f"transfer: parent={parent} snap={s}")
-            operations.send_withparent(
-                parent, s, target_host, target_dir, ssh_port, rate_limit
-            )
-            if link_dir is not None:
-                operations.link_current(target_host, target_dir, s, link_dir, ssh_port)
-            # advance one step
-            parent = s
-
-
-def remotecleandir(operations, target_host, target_dir, remote_keep, ssh_port):
-    """Perform remote cleanup using 'operations' until exactly remote_keep backups are left"""
-    trace = operations.trace
-
-    if remote_keep is not None:
-        dirs = sorted(
-            operations.listremote_dir(
-                receiver=target_host, receiver_path=target_dir, ssh_port=ssh_port
-            )
-        )
-        dirs_len = len(dirs)
-        if dirs_len <= remote_keep or remote_keep <= 0:
-            trace(
-                LOG_REMOTE
-                + "No remote directories to clean, currently %s remote backups, should keep %s",
-                dirs_len,
-                remote_keep,
-            )
-        else:
-            delete_dirs = sorted_value(dirs)
-            del_count = dirs_len - remote_keep
-            trace(
-                LOG_REMOTE
-                + f"about to remove {del_count} of out of {dirs_len} backups, keeping {remote_keep}"
-            )
-            for del_dir in itertools.islice(delete_dirs, del_count):
-                if del_dir is None:
-                    trace(LOG_REMOTE + "No more backups left")
-                    break
-                else:
-                    operations.remote_unsnap(target_host, target_dir, del_dir, ssh_port)
-
-
-def sync_local(operations, sync_dir):
-    """Transfer snapshots to local target"""
-    trace = operations.trace
-
-    # find out what kind of snapshots exist on the remote host
-    targetsnaps = set(operations.listdir_path(sync_dir))
-    localsnaps = set(operations.listdir())
-
-    if len(localsnaps) == 0:
-        # nothing to do here, no snaps here
-        return
-
-    parents = targetsnaps.intersection(localsnaps)
-
-    # no parent exists so
-    if len(parents) == 0:
-        # start transferring the oldest snapshot
-        # by that snapbtrex will transfer all snapshots that have been created
-        operations.sync_single(min(localsnaps), sync_dir)
-        parents.add(min(localsnaps))
-
-    # parent existing, use the latest as parent
-    max_parent = max(parents)
-    parent = max_parent
-
-    trace(LOG_LOCAL + f"Sync: last possible parent = {max_parent}")
-
-    for s in sorted(localsnaps):
-        if s > max_parent:
-            trace(LOG_LOCAL + f"transfer: parent={parent} snap={s}")
-            operations.sync_withparent(parent, s, sync_dir)
-            # if link_dir is not None:
-            #    operations.link_current(target_host, target_dir, s, link_dir, ssh_port)
-            parent = s
-
-
-def sync_cleandir(operations, target_dir, sync_keep):
-    """Perform local sync cleanup using 'operations' until exactly sync_keep backups are left"""
-    trace = operations.trace
-
-    if sync_keep is not None:
-        dirs = sorted(operations.listdir_path(target_dir))
-        dirs_len = len(dirs)
-        if dirs_len <= sync_keep or sync_keep <= 0:
-            trace(
-                LOG_LOCAL
-                + f"No synced directories to clean, currently {dirs_len} synced backups, should keep {sync_keep}"
-            )
-        else:
-            delete_dirs = sorted_value(dirs)
-            del_count = dirs_len - sync_keep
-            trace(
-                LOG_LOCAL
-                + f"about to remove sync {del_count} of out of {dirs_len} synced backups, keeping {sync_keep}"
-            )
-            for del_dir in itertools.islice(delete_dirs, del_count):
-                trace(LOG_LOCAL + "removing: ")
-                if del_dir is None:
-                    trace(LOG_LOCAL + "No more synced backups left")
-                    break
-                else:
-                    operations.unsnapx(os.path.join(target_dir, del_dir))
-
-
-def log_trace(fmt, *args, **kwargs):
-    try:
-        tt = time.strftime(DATE_FORMAT, time.gmtime(None)) + ": "
-        if args:
-            print(tt + (fmt % args))
-        elif kwargs:
-            print(tt + (fmt % kwargs))
-        else:
-            print(tt + fmt)
-    except (Exception,):
-        print(fmt)
-
-
-def default_trace(fmt, *args, **kwargs):
-    try:
-        if args:
-            print(fmt % args)
-        elif kwargs:
-            print(fmt % kwargs)
-        else:
-            print(fmt)
-    except (Exception,):
-        print(fmt)
-
-
-def null_trace(fmt, *args, **kwargs):
-    pass
-
-
-def main(argv):
-    import argparse
-
-    class UnitInt(int):
-        format = ""
-        mods = {}
-
-        @staticmethod
-        def parse(cls, target_str):
-            import re
-
-            form = cls.format % "|".join(x for x in cls.mods.keys() if x is not None)
-            m = re.match(form, target_str, re.IGNORECASE)
-            if m:
-                val, mod = m.groups()
-                result = cls.eval(int(val), mod)
-                return result
-            else:
-                raise ValueError(f"Invalid value: {target_str}, expected: {form}")
-
-        def __init__(self, value):
-            super().__init__(value)
-            self.origin = value
-
-        def __new__(cls, value=0):
-            if isinstance(value, str):
-                value = UnitInt.parse(cls, value)
-            return value
-
-        def __str__(self):
-            if isinstance(self.origin, int):
-                return str(self.origin)
-            else:
-                return "%s[%s]" % (self.origin, int(self))
-
-    class Space(UnitInt):
-        format = "([0-9]+)(%s)?"
-        mods = {None: 0, "K": 1, "M": 2, "G": 3, "T": 4}
-
-        @staticmethod
-        def eval(val, mod):
-            if mod is None:
-                return val
-            else:
-                return val * 1024 ** Space.mods[mod.upper()]
-
-    class Age(UnitInt):
-        format = "([0-9]+)(%s)?"
-        mods = {
-            None: 1,
-            "s": 1,
-            "m": 60,
-            "h": 60 * 60,
-            "d": 24 * 60 * 60,
-            "w": 7 * 24 * 60 * 60,
-            "y": (52 * 7 + 1) * 24 * 60 * 60,  # year = 52 weeks + 1 or 2 days
-        }
-
-        @staticmethod
-        def eval(val, mod):
-            if mod is None:
-                return max(0, time.time() - val)
-            else:
-                return max(0, time.time() - val * Age.mods[mod.lower()])
-
-    def parse_ageoffset_to_timestamp(age_str):
-        now = time.time()
-        age = int(age_str)
-        if age > now:
-            raise "Invalid value: %d, expected less than: %d" % (age, now)
-        else:
-            return float(now - age)
-
-    parser = argparse.ArgumentParser(
-        description="Keep btrfs snapshots for backup, optionally sync to snapshots locally or sends snapshots to "
-        "remote systems via ssh. Visit https://github.com/yoshtec/snapbtrex for more insight."
-    )
-
-    parser.add_argument(
-        "--path",
-        "-p",
-        "--snap-to",
-        metavar="PATH",
-        required=False,
-        help="Target path for new snapshots and cleanup operations",
-    )
-
-    target_group = parser.add_argument_group(
-        title="Cleanup", description="Delete backup snapshots until the targets are met"
-    )
-
-    target_group.add_argument(
-        "--target-freespace",
-        "-F",
-        dest="target_freespace",
-        metavar="SIZE",
-        default=None,
-        type=Space,
-        help="Cleanup PATH until at least SIZE is free. SIZE is #bytes, "
-        + "or given with K, M, G or T respectively for kilo, ...",
-    )
-
-    target_group.add_argument(
-        "--target-backups",
-        "-B",
-        dest="target_backups",
-        metavar="#",
-        type=int,
-        help="Cleanup PATH until at most B backups remain",
-    )
-
-    target_group.add_argument(
-        "--keep-backups",
-        "-K",
-        metavar="N",
-        type=int,
-        default=DEFAULT_KEEP_BACKUPS,
-        help="Keep minimum of N backups -> This is a lower bound. the lower bound is valid for all other options",
-    )
-
-    target_group.add_argument(
-        "--max-age",
-        "-A",
-        dest="max_age",
-        metavar="MAX_AGE",
-        default=None,
-        type=Age,
-        help="Prefer removal of backups older than MAX_AGE seconds. MAX_AGE is #seconds, "
-        + "or given with m (minutes), h (hours), d (days), w (weeks), y (years = 52w + 1d).",
-    )
-
-    target_group.add_argument(
-        "--keep-only-latest",
-        "-L",
-        dest="keep_latest",
-        action="store_true",
-        help="lets you keep only the latest snapshots",
-    )
-
-    snap_group = parser.add_mutually_exclusive_group(required=False)
-
-    snap_group.add_argument(
-        "--snap",
-        "-s",
-        "--snap-this",
-        metavar="SUBVOL",
-        default=".",
-        help="Take snapshot of SUBVOL on invocation",
-    )
-
-    snap_group.add_argument(
-        "--no-snap",
-        "-S",
-        dest="snap",
-        help="Do not take snapshot",
-        action="store_const",
-        const=None,
-    )
-
-    parser.add_argument("--test", help="Execute built-in tests", action="store_true")
-
-    parser.add_argument(
-        "--explain", help="Explain what %(prog)s does (and stop)", action="store_true"
-    )
-
-    parser.add_argument(
-        "--dry-run",
-        help="Do not execute commands, but print shell commands to stdout that would be executed",
-        dest="dry_run",
-        action="store_true",
-    )
-
-    parser.add_argument("--verbose", "-v", help="Verbose output", action="store_true")
-
-    transfer_group = parser.add_argument_group(
-        title="Transfer",
-        description="Transfer snapshots to other hosts via ssh. "
-        + "It is assumed that the user running the script is run can connect to the remote host "
-        + "via keys and without passwords. See --explain or visit the homepage for more info",
-    )
-
-    transfer_group.add_argument(
-        "--remote-host",
-        metavar="HOST",
-        dest="remote_host",
-        help="Transfer to target host via ssh.",
-    )
-
-    transfer_group.add_argument(
-        "--remote-dir",
-        metavar="PATH",
-        dest="remote_dir",
-        help="Transfer the snapshot to this PATH on the target host",
-    )
-
-    transfer_group.add_argument(
-        "--remote-link",
-        metavar="LINK",
-        dest="remote_link",
-        help="Create a link the transferred snapshot to this LINK",
-    )
-
-    transfer_group.add_argument(
-        "--remote-keep",
-        metavar="N",
-        type=int,
-        dest="remote_keep",
-        help="Cleanup remote backups until N backups remain, if unset keep all remote transferred backups",
-    )
-
-    transfer_group.add_argument(
-        "--ssh-port", metavar="SSHPORT", dest="ssh_port", default="22", help="SSH port"
-    )
-
-    transfer_group.add_argument(
-        "--rate-limit",
-        metavar="RATE",
-        dest="rate_limit",
-        default="0",
-        help="Limit the transfer to a maximum of RATE bytes per "
-        + 'second. A suffix of "k", "m", "g", or "t" can be added '
-        + "to denote kilobytes (*1024), megabytes, and so on.",
-    )
-
-    sync_group = parser.add_argument_group(
-        title="Sync Local",
-        description="Transfer snapshots to another local (btrfs) filesystem.",
-    )
-
-    sync_group.add_argument(
-        "--sync-target",
-        metavar="PATH",
-        dest="sync_dir",
-        help="Copy snapshot to this path",
-    )
-
-    sync_group.add_argument(
-        "--sync-keep",
-        metavar="N",
-        type=int,
-        dest="sync_keep",
-        help="Cleanup local synced backups until N backups remain, if unset keep all locally synced backups",
-    )
-
-    # safety net if no arguments are given call for usage
-    if len(sys.argv[1:]) == 0:
-        parser.print_usage()
-        return 0
-
-    pa = parser.parse_args()
-
-    if pa.verbose:
-        if sys.stdout.isatty():
-            trace = default_trace
-        else:
-            # use logging with timestamps on script output
-            trace = log_trace
-    else:
-        trace = null_trace
-
-    if pa.explain:
-        sys.stdout.write(__doc__)
-        return 0
-
-    if pa.path is None:
-        print("Path is missing")
-        parser.print_help()
-        return 1
-
-    # test if pv is installed for needed actions
-    if (
-        not (pa.remote_host is None and pa.remote_dir is None)
-        or pa.sync_dir is not None
-    ):
-        import shutil
-
-        pv = shutil.which("pv")
-        if pv is None:
-            print("Error: Missing dependency 'pv' for transfer of snapshots")
-            print("install e.g. via 'apt install pv'")
-            return 1
-
-    if pa.test:
-        trace("## TEST ##")
-        trace(
-            "## TEST ## Testing mode: all operations are only displayed without execution"
-        )
-        trace("## TEST ##")
-        operations = FakeOperations(
-            path=pa.path,
-            trace=trace,
-            dirs={
-                "20101201-000000": 0,
-                "20101201-010000": 1,
-                "20101201-020000": 2,
-                "20101201-030000": 3,
-                "20101201-040000": 4,
-                "20101201-050000": 5,
-                "20101201-060000": 6,
-                "20101201-070000": 7,
-                "20101201-080000": 8,
-            },
-            space=5,
-        )
-    elif pa.dry_run:
-        trace("## DRY RUN ##")
-        trace(
-            "## DRY RUN ## Dry Run mode: disk-modifying operations are only displayed without execution"
-        )
-        trace("## DRY RUN ##")
-        operations = DryOperations(path=pa.path, trace=trace)
-    else:
-        operations = Operations(path=pa.path, trace=trace)
-
-    # -- Actions --
-    # 1. Snapshot
-    if pa.snap:
-        operations.snap(path=pa.snap)
-
-    # 2. remote transfer: host and remote dir are needed
-    if not (pa.remote_host is None and pa.remote_dir is None):
-        try:
-            transfer(
-                operations,
-                pa.remote_host,
-                pa.remote_dir,
-                pa.remote_link,
-                pa.ssh_port,
-                pa.rate_limit,
-            )
-            if pa.remote_keep is not None:
-                remotecleandir(
-                    operations,
-                    pa.remote_host,
-                    pa.remote_dir,
-                    pa.remote_keep,
-                    pa.ssh_port,
-                )
-        except RuntimeError as e:
-            trace(LOG_REMOTE + f"Error while transferring to remote host: {e}")
-
-    # 3. Local sync to another path
-    if pa.sync_dir is not None:
-        try:
-            sync_local(operations, pa.sync_dir)
-            if pa.sync_keep is not None:
-                sync_cleandir(operations, pa.sync_dir, pa.sync_keep)
-        except RuntimeError as e:
-            trace(f"{LOG_LOCAL} ERROR while Syncing local: {e}")
-
-    # 4. Cleanup local
-    if pa.target_freespace is not None or pa.target_backups is not None:
-        try:
-            if pa.keep_backups == DEFAULT_KEEP_BACKUPS:
-                trace(
-                    f"{LOG_LOCAL} using default value for --keep-backups: {DEFAULT_KEEP_BACKUPS}"
-                )
-            cleandir(operations=operations, targets=pa)
-        except RuntimeError as e:
-            trace(f"{LOG_LOCAL} ERROR while cleaning up: {e}")
-    else:
-        trace(
-            f"{LOG_LOCAL} no options for cleaning were passed -> keeping all snapshots"
-        )
-
-
-if "__main__" == __name__:
-    sys.exit(main(sys.argv))
