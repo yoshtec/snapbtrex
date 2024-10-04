@@ -17,8 +17,8 @@ setuptools.setup(
     url="https://github.com/yoshtec/snapbtrex",
     entry_points={
         "console_scripts": [
-            "snapbtrex = cli:main",
-            "snapbtrex.py = cli:main",
+            "snapbtrex = snapbtrex.cli:main",
+            "snapbtrex.py = snapbtrex.cli:main",
         ]
     },
     packages=setuptools.find_packages(),

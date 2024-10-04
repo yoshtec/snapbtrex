@@ -8,7 +8,7 @@ jobs:
   # when a job name is not provided
   snap-test:
     # Name the Job
-    name: Test Snapshoting and local transfers
+    name: Test Snapshotting and local transfers
     # Set the type of machine to run on
     runs-on: ubuntu-latest
 
