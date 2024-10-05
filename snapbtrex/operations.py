@@ -610,8 +610,11 @@ class Operations:
                         self.unsnapx(os.path.join(target_dir, del_dir))
 
 
-# Allows to Simulate operations
 class DryOperations(Operations):
+    """
+    DryOperations is a subclass of Operations that simulates operations without making changes
+    """
+
     def __init__(self, path, trace=None):
         Operations.__init__(self, path=path, trace=trace)
         self.dirs = None

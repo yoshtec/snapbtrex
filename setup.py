@@ -1,6 +1,6 @@
 import setuptools
 
-VERSION = "2.0.7"
+VERSION = "2.0.9"
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
@@ -17,11 +17,12 @@ setuptools.setup(
     url="https://github.com/yoshtec/snapbtrex",
     entry_points={
         "console_scripts": [
-            "snapbtrex = snapbtrex.cli:main",
-            "snapbtrex.py = snapbtrex.cli:main",
+            "snapbtrex=snapbtrex.cli:main",
+            "snapbtrex.py=snapbtrex.cli:main",
         ]
     },
-    packages=setuptools.find_packages(),
+    #packages=setuptools.find_packages(exclude=["tests", "tests.*"]),
+    packages=['snapbtrex'],
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Programming Language :: Python :: 3",

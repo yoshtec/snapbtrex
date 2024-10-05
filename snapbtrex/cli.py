@@ -1,25 +1,11 @@
-import sys
-import time
-from .snapbtrex import (
+import sys, time
+from .operations import (
     FakeOperations,
     Operations,
     DryOperations,
     DATE_FORMAT,
     DEFAULT_KEEP_BACKUPS,
 )
-
-
-def log_trace(fmt, *args, **kwargs):
-    try:
-        tt = time.strftime(DATE_FORMAT, time.gmtime(None)) + ": "
-        if args:
-            print(tt + (fmt % args))
-        elif kwargs:
-            print(tt + (fmt % kwargs))
-        else:
-            print(tt + fmt)
-    except (Exception,):
-        print(fmt)
 
 
 def default_trace(fmt, *args, **kwargs):
@@ -32,6 +18,11 @@ def default_trace(fmt, *args, **kwargs):
             print(fmt)
     except (Exception,):
         print(fmt)
+
+
+def log_trace(fmt, *args, **kwargs):
+    tt = time.strftime(DATE_FORMAT, time.gmtime(None)) + ": " + fmt
+    default_trace(tt, *args, **kwargs)
 
 
 def null_trace(fmt, *args, **kwargs):
@@ -400,7 +391,3 @@ def main(argv):
         operations.log_local(
             "no options for cleaning were passed -> keeping all snapshots"
         )
-
-
-if "__main__" == __name__:
-    sys.exit(main(sys.argv))
